@@ -3,5 +3,6 @@ pymupdf
 pillow
 easyocr
 spacy
+de-core-news-sm
 numpy
 faker

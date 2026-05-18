@@ -10,8 +10,8 @@ def setup():
     subprocess.check_call([sys.executable, "-m", "pip", "install", "-r", "requirements.txt"])
     
     # 2. KI-Modelle laden
-    print("Lade spaCy Sprachmodell (lg)...")
-    subprocess.check_call([sys.executable, "-m", "spacy", "download", "de_core_news_lg"])
+    print("Lade spaCy Sprachmodell (sm)...")
+    subprocess.check_call([sys.executable, "-m", "spacy", "download", "de_core_news_sm"])
     
     # 3. Grundstruktur prüfen
     if not os.path.exists("vornamen.txt"):

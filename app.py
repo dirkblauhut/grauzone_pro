@@ -18,10 +18,19 @@ def load_ocr():
 
 @st.cache_resource
 def load_nlp():
-    try:
-        return spacy.load("de_core_news_lg")
-    except OSError:
-        return spacy.load("de_core_news_sm")
+    for model_name in ["de_core_news_lg", "de_core_news_sm"]:
+        try:
+            return spacy.load(model_name)
+        except OSError:
+            try:
+                spacy.cli.download(model_name)
+                return spacy.load(model_name)
+            except Exception as err:
+                st.warning(f"spaCy-Modell '{model_name}' konnte nicht geladen werden: {err}")
+                continue
+    raise RuntimeError(
+        "Kein spaCy-Modell verfügbar. Bitte installiere 'de_core_news_sm' oder stelle sicher, dass der Download funktioniert."
+    )
 
 @st.cache_resource
 def load_names_list():

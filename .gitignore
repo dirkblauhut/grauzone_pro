@@ -1,0 +1,23 @@
+# Python Umgebung
+venv/
+.env
+__pycache__/
+*.pyc
+
+# PyInstaller & Build-Daten (zu groß für GitHub)
+build/
+dist/
+*.spec
+
+# Benutzerdaten (Sollen lokal bleiben)
+knowledge_base.json
+vornamen.txt
+trainingsdaten/
+
+# Systemdateien
+.DS_Store
+Thumbs.db
+
+# IDE Einstellungen
+.vscode/
+.idea/

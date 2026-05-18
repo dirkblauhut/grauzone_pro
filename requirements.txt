@@ -2,7 +2,8 @@ streamlit
 pymupdf
 pillow
 easyocr
-spacy
-de-core-news-sm
+numpy
+faker
+spacy>=3.5.0,<3.6.0
 numpy
 faker

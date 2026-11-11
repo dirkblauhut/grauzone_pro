@@ -1,12 +1,22 @@
 # Projektstand: Grauzone PRO
 
-Stand: 2026-11-11, Branch main, Commit b02707d (Release `v0.4.4`), darauf folgt der Commit zu 0.4.5 (`macos/VERSION` = 0.4.5)
+Stand: 2026-11-11, Branch redesign (abgezweigt von main bei 53bf816, Release `v0.4.5`)
 
 Ergänzt [UEBERGABE.md](UEBERGABE.md). Dort stehen Dateiübersicht, Funktionsweise der Mac-App, Release-Ablauf (Abschnitt 4) und Testanleitung (Abschnitt 5). Diese Datei hält Festlegungen, Learnings und Sackgassen fest und wird nicht mit UEBERGABE.md zusammengeführt.
 
 ## Verbindlichkeit
 
 Abschnitt 1 (Festlegungen) und Abschnitt 3 beschreiben abgestimmte und getestete Lösungen. Sie werden nicht geändert, zurückgebaut oder umgebaut, solange keine neue Anforderung das verlangt. Verlangt eine neue Funktion eine Änderung, vor der Umsetzung die betroffene Festlegung benennen, die Änderung begründen und Rückfrage halten.
+
+## Testversion (Branch `redesign`)
+
+Vom Nutzer festgelegt am 2026-11-11: `main` mit Release `v0.4.5` ist die funktionale Version. Auf `redesign` entsteht eine Testversion mit neuem UI/UX und neuen Funktionen, entwickelt auf zwei Macs.
+- Releases nur aus `main`. Aus `redesign` kein Release mit `--latest`, sonst bietet das Selbst-Update der Mac-App die Testversion an; höchstens `--prerelease`.
+- Start der Testversion: `START_TEST.command` (Quellcode, Port 8502, prüft Python 3.11 in `venv/`). Die Mac-App auf Port 8501 kann parallel laufen; Wissensbasis und Vornamenliste der Testversion liegen im Projektordner, getrennt von `~/Library/Application Support/Grauzone PRO`.
+- Zwei Geräte: GitHub ist die gemeinsame Ablage. Vor der Arbeit `git switch redesign` und `git pull`, danach committen und `git push`. Am Sitzungsende `/projekt-uebergabe` ausführen und diese Datei mitpushen; Claude-Memory gilt nur je Gerät. Nicht auf beiden Geräten gleichzeitig dieselbe Datei ändern.
+- Pro Gerät, nicht im Repository: `venv/` (per `Grauzone installieren.command`), `knowledge_base.json`, `vornamen.txt`.
+- Korrekturen an `main` (0.4.x) per `git merge main` nach `redesign` übernehmen.
+- Ideen des Nutzers (ChatGPT-Entwurf vom 2026-11-11, nicht abgestimmt): Drei-Spalten-Layout, Bearbeiten direkt im Dokument, Regeln mit Geltungsbereich (Dokument, Profil, global) und Rückfrage vor globaler Übernahme, Profile, Undo, Exportprüfung und Prüfprotokoll ohne Originaldaten, heller Stil mit Dunkelblau, Dark Mode optional. Vor der Umsetzung mit dem Nutzer klären, weil sie Festlegungen berühren: PDF.js als eigene Komponente (braucht Node/npm), Presidio und lokales Sprachmodell (Versionskette L2, 8 GB RAM), Tesseract statt EasyOCR (Systemprogramm), SQLite statt `knowledge_base.json`.
 
 ## 1. Kernarchitektur und Tech-Stack
 
@@ -106,9 +116,8 @@ Verworfene Ansätze:
 
 ## 4. Offene Aufgaben
 
-- [ ] Nächste Version (Ideen des Nutzers vom 2026-11-11, Reihenfolge offen):
-  - [ ] Oberfläche modern gestalten (UI/UX)
-- [ ] Release 0.4.5 mit allen vier Anhängen veröffentlichen (Priorität hoch); Selbst-Update beim Nutzer echt prüfen (Nutzer lief am 2026-11-11 noch mit 0.4.3)
+- [ ] Testversion auf `redesign` (siehe Abschnitt „Testversion“): zuerst automatische Tests, dann Layout, dann weitere Funktionen schrittweise (Priorität hoch)
+- [ ] Selbst-Update auf 0.4.5 beim Nutzer echt prüfen (Nutzer lief am 2026-11-11 noch mit 0.4.3) (hoch)
 - [ ] EasyOCR ist nicht nach oben begrenzt (installiert 1.7.2) (niedrig)
 - [ ] Dateiname des Exports übernimmt den Originalnamen (`Anonymisiert_<Name>`), der selbst Personennamen enthalten kann (mittel)
 - [ ] Gleiche Person in anderer Schreibweise („Mustermann, Erika“ / „Erika Mustermann“) bekommt im Markdown verschiedene Nummern (niedrig)
@@ -123,10 +132,10 @@ Verworfene Ansätze:
 
 ### Nächster konkreter Schritt
 
-Mehrseitigen Durchlauf mit `erkennung.py` ohne Oberfläche prüfen. Dazu in einer Python-3.11-Umgebung (`./venv/bin/python` nach dem Installer) ein Testskript im Scratch-Bereich anlegen, das mit PyMuPDF ein PDF aus mindestens drei Seiten mit erfundenen Daten erzeugt: Seite 1 mit Textebene, Seite 2 als eingefügtes Bild ohne Textebene, Seite 3 mit Fundstellen über einen Zeilenumbruch. Je Seite den Ablauf aus `app.py` `scanne` nachbilden (`woerter_aus_textebene`, bei weniger als drei Wörtern `woerter_aus_ocr`, dann `seitentext`, `finde`, `wort_rechteck`), Redaktionen anlegen, `apply_redactions()` aufrufen und speichern. Erwartet: Mit `page.get_text()` steht an keiner geschwärzten Stelle mehr Text; auf der Scan-Seite zeigt das gerenderte Bild keine Buchstabenreste; nicht betroffene Wörter bleiben erhalten. Anschließend denselben Ablauf in der App mit „Alle Seiten“ und Export prüfen und Abweichungen in Abschnitt 3 oder 4 eintragen.
+Auf `redesign` automatische Regressionstests anlegen (Grundlage für den Umbau). Dazu zuerst auf jedem Gerät `Grauzone installieren.command` ausführen, damit `venv/` Python 3.11 hat. Dann unter `tests/` mit pytest einen mehrseitigen Durchlauf mit `erkennung.py` ohne Oberfläche prüfen: Ein Test erzeugt mit PyMuPDF ein PDF aus mindestens drei Seiten mit erfundenen Daten: Seite 1 mit Textebene, Seite 2 als eingefügtes Bild ohne Textebene, Seite 3 mit Fundstellen über einen Zeilenumbruch. Je Seite den Ablauf aus `app.py` `scanne` nachbilden (`woerter_aus_textebene`, bei weniger als drei Wörtern `woerter_aus_ocr`, dann `seitentext`, `finde`, `wort_rechteck`), Redaktionen anlegen, `apply_redactions()` aufrufen und speichern. Erwartet: Mit `page.get_text()` steht an keiner geschwärzten Stelle mehr Text; auf der Scan-Seite zeigt das gerenderte Bild keine Buchstabenreste; nicht betroffene Wörter bleiben erhalten. Zusätzlich Formularfeld (über `oeffne_pdf`) und Markdown-Export (`E.markdown`) abdecken. Abweichungen in Abschnitt 3 oder 4 eintragen.
 
 ## Ungeprüft
 
-- Die lokalen Umgebungen `venv/` (Python 3.9.6, spaCy 3.8.2, numpy 2.0.2, Modelle 3.8.0) und `.venv/` (Python 3.9.6, spaCy 3.5.4, numpy 2.0.2) widersprechen `requirements.txt`. Ob sie noch gebraucht werden, ist offen; `Grauzone installieren.command` würde `venv/` mit Python 3.11 neu anlegen. `.venv/` ist nicht in `.gitignore`.
+- Die lokalen Umgebungen `venv/` (Python 3.9.6, spaCy 3.8.2, numpy 2.0.2, Modelle 3.8.0) und `.venv/` (Python 3.9.6, spaCy 3.5.4, numpy 2.0.2) widersprechen `requirements.txt`. Ob sie noch gebraucht werden, ist offen; `Grauzone installieren.command` würde `venv/` mit Python 3.11 neu anlegen. `.venv/` steht seit dem Branch `redesign` in `.gitignore`.
 - Ob die Version 0.3.0 in der laufenden App vollständig getestet wurde, ist nur durch UEBERGABE.md belegt, nicht durch Tests im Repository.
 - Herkunft und Zweck von `trainingsdaten/` und `dist/run_app.app` (vom 11.05.2026) sind nicht geklärt.

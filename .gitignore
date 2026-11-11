@@ -1,5 +1,6 @@
 # Python Umgebung
 venv/
+.venv/
 .env
 __pycache__/
 *.pyc

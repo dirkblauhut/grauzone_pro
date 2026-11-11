@@ -1,6 +1,6 @@
 # Übergabe: Grauzone PRO
 
-Stand: 11.11.2026, Version **0.4.4** (Release `v0.4.4` noch nicht veröffentlicht; zuletzt veröffentlicht: `v0.4.3`; `v0.3.1` nur als Tag)
+Stand: 11.11.2026, Version **0.4.5** (Release `v0.4.5` noch nicht veröffentlicht; zuletzt veröffentlicht: `v0.4.4`; `v0.3.1` nur als Tag)
 
 Dieses Dokument fasst zusammen, wie das Projekt aufgebaut ist, wie man eine neue Version herausbringt und was noch offen ist. Für Nutzerinnen und Nutzer ist die [README](README.md) gedacht.
 
@@ -99,3 +99,4 @@ Die App ist nur ad hoc signiert, nicht notarisiert. macOS fragt beim ersten Öff
 | 0.4.2 | 11.11.2026 | `use_container_width` durch `width="stretch"` ersetzt, Streamlit-Version begrenzt |
 | 0.4.3 | 11.11.2026 | `import pymupdf` statt `import fitz`, PyMuPDF-Version begrenzt |
 | 0.4.4 | 11.11.2026 | Vorschau zeigt alle Seiten zum Scrollen, Blättern mit ◀ ▶ und „Bearbeiten“ |
+| 0.4.5 | 11.11.2026 | ◀ ▶, Seitenzahl und Schalter scrollen die Vorschau zur Seite; Scrollbereich passt sich der Fensterhöhe an |

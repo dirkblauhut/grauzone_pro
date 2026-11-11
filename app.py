@@ -7,6 +7,7 @@ import easyocr
 import pymupdf
 import spacy
 import streamlit as st
+import streamlit.components.v1 as components
 from PIL import Image, ImageDraw
 
 import erkennung as E
@@ -137,6 +138,7 @@ if uploaded_file is not None and uploaded_file.name != st.session_state.last_upl
     st.session_state.export = None
     st.session_state.funde_speicher = {}
     st.session_state.seite = 1
+    st.session_state.gezeigt = None
     st.rerun()
 
 
@@ -222,6 +224,30 @@ def vorschau(doc, datei_id, p, zoom):
 
 def gehe_zu(seite):
     st.session_state.seite = seite
+
+
+def zur_seite_scrollen(p):
+    """Scrollt den Vorschau-Container, bis Seite p oben steht. Streamlit kann das
+    nicht selbst; ein unsichtbares Skript sucht die Marke grauzone-seite-p in der
+    Seite und wartet, bis alle Seitenbilder geladen sind (sonst stimmt die Höhe nicht)."""
+    components.html(f"""<script>
+    const d = window.parent.document, start = Date.now(), lauf = {st.session_state.get('scroll_nr', 0)};
+    function versuch() {{
+        const marke = d.getElementById("grauzone-seite-{p}");
+        let box = marke && marke.parentElement;
+        while (box && !(box.scrollHeight > box.clientHeight
+                && /auto|scroll/.test(getComputedStyle(box).overflowY))) box = box.parentElement;
+        const bilder = box ? [...box.querySelectorAll("img")] : [];
+        const fertig = box && bilder.length && bilder.every(b => b.complete && b.naturalHeight);
+        if (fertig) {{
+            box.scrollTop += marke.getBoundingClientRect().top - box.getBoundingClientRect().top - 8;
+        }} else if (Date.now() - start < 8000) {{
+            setTimeout(versuch, 100);
+        }}
+    }}
+    versuch();
+    </script>""", height=0)
+    st.session_state.scroll_nr = st.session_state.get("scroll_nr", 0) + 1
 
 
 # --- 6. HAUPTBEREICH ---
@@ -347,13 +373,24 @@ if uploaded_file:
 
         st.caption("Rot = wird geschwärzt, grau = abgewählt.")
         if alle_zeigen and n > 1:
-            with st.container(height=900):
+            # Höhe an das Browserfenster anpassen, damit Pfeile und Seite gleichzeitig sichtbar bleiben
+            st.markdown("<style>div:has(>.st-key-vorschau){--h:max(400px,calc(100vh - 340px));"
+                        "height:var(--h)!important;flex:0 0 var(--h)!important}</style>",
+                        unsafe_allow_html=True)
+            with st.container(height=800, key="vorschau"):
                 for p in range(n):
                     k1, k2 = st.columns([3, 1])
                     status = "gescannt" if p in st.session_state.woerter else "nicht gescannt"
-                    k1.markdown(f"**{'▶ ' if p == p_id else ''}Seite {p + 1}** · {status}")
+                    k1.markdown(f"<span id='grauzone-seite-{p}'></span>"
+                                f"**{'▶ ' if p == p_id else ''}Seite {p + 1}** · {status}",
+                                unsafe_allow_html=True)
                     k2.button("Bearbeiten", key=f"bearbeiten_{p}", on_click=gehe_zu, args=(p + 1,),
                               disabled=p == p_id, width="stretch")
                     st.image(vorschau(doc, datei_id, p, zoom_preview), width="stretch")
+            # Bei Seitenwechsel (Pfeile, Seitenzahl, Schalter) die Vorschau zur Seite scrollen
+            if st.session_state.get("gezeigt") not in (None, (p_id, True)):
+                zur_seite_scrollen(p_id)
+            st.session_state.gezeigt = (p_id, True)
         else:
             st.image(vorschau(doc, datei_id, p_id, zoom_preview), width="stretch")
+            st.session_state.gezeigt = (p_id, False)

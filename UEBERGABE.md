@@ -1,6 +1,6 @@
 # Übergabe: Grauzone PRO
 
-Stand: 11.11.2026, Version **0.4.0** (Release `v0.4.0` noch nicht veröffentlicht; zuletzt veröffentlicht: `v0.3.2`; `v0.3.1` nur als Tag)
+Stand: 11.11.2026, Version **0.4.1** (Release `v0.4.1` noch nicht veröffentlicht; zuletzt veröffentlicht: `v0.4.0`; `v0.3.1` nur als Tag)
 
 Dieses Dokument fasst zusammen, wie das Projekt aufgebaut ist, wie man eine neue Version herausbringt und was noch offen ist. Für Nutzerinnen und Nutzer ist die [README](README.md) gedacht.
 
@@ -22,7 +22,7 @@ Grauzone PRO schwärzt personenbezogene Daten in PDF-Dokumenten, vollständig lo
 | Datei | Inhalt |
 |---|---|
 | `app.py` | Oberfläche: Hochladen, Scannen (Seite / alle Seiten), Fundstellen-Liste, Lernen, Export |
-| `erkennung.py` | Erkennung ohne Streamlit: Wörter holen, Seitentext bauen, Fundstellen suchen, Rechtecke berechnen |
+| `erkennung.py` | Erkennung ohne Streamlit: Wörter holen, Seitentext bauen, Fundstellen suchen, Rechtecke berechnen, Markdown-Export (`markdown`) |
 | `requirements.txt` | Bibliotheken; **spaCy < 3.6 und numpy < 2 sind Pflicht** |
 | `.streamlit/config.toml` | nur `localhost`, keine Nutzungsstatistik, `headless` (keine E-Mail-Abfrage) |
 | `Grauzone installieren.command` | Einrichtung aus dem Quellcode per Doppelklick (uv + Python 3.11) |
@@ -93,3 +93,4 @@ Die App ist nur ad hoc signiert, nicht notarisiert. macOS fragt beim ersten Öff
 | 0.3.1 | 11.11.2026 | Formularfelder und Anmerkungen werden mitgeschwärzt (vorher blieb ihr Text lesbar) |
 | 0.3.2 | 11.11.2026 | Starter beendet nach einem Update einen noch laufenden alten Server; Versionsnummer in der Seitenleiste |
 | 0.4.0 | 11.11.2026 | Selbst-Update von GitHub nach Rückfrage, abschaltbar in der Seitenleiste |
+| 0.4.1 | 11.11.2026 | Export zusätzlich als Markdown mit nummerierten Platzhaltern |

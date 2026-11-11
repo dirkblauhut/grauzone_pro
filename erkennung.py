@@ -240,3 +240,68 @@ def wort_rechteck(wort: Wort, fund: Fund) -> tuple[float, float, float, float]:
     zugabe = 0.35 * breite if (a > 0 or b < n) else 1.0
     return (max(x0 - 1.0, x0 + a * breite - zugabe), y0 - 1.0,
             min(x1 + 1.0, x0 + b * breite + zugabe), y1 + 1.0)
+
+
+# --- 3. Export als Markdown -----------------------------------------------------
+
+PLATZHALTER = {
+    "PER": "Person", "ORT": "Ort", "ORG": "Organisation", "TEL": "Telefon",
+    "MAIL": "E-Mail", "IBAN": "IBAN", "ADR": "Anschrift", "LISTE": "geschwärzt",
+}
+_MD_ZEICHEN = re.compile(r"([\\`*_\[\]<>#|~])")
+_MD_ZEILENANFANG = re.compile(r"^(\s*)(?:([-+>=])|(\d+)([.)]))(?=\s|$)")
+
+
+def _md_zeilenanfang(m) -> str:
+    """Verhindert, dass eine Zeile als Liste, Zitat oder Überschrift gilt."""
+    if m.group(2):
+        return f"{m.group(1)}\\{m.group(2)}"
+    return f"{m.group(1)}{m.group(3)}\\{m.group(4)}"
+
+
+def _md_text(s: str) -> str:
+    """Maskiert Zeichen, die Markdown sonst als Formatierung liest."""
+    return _MD_ZEICHEN.sub(r"\\\1", s)
+
+
+def markdown(seiten, gewaehlt, kopf: str = "", nicht_gescannt=()) -> tuple[str, int]:
+    """Text der gescannten Seiten als Markdown, Fundstellen durch Platzhalter ersetzt.
+
+    seiten:   Liste von (Seitenindex, Seitentext, Funde) wie aus seitentext/finde.
+    gewaehlt: Funktion (Seitenindex, Fund) -> bool; nur gewählte Stellen werden ersetzt.
+    Gleiche Angaben (gleiche Art, gleicher Text) bekommen im ganzen Dokument
+    dieselbe Nummer, z. B. [Person 1]. Liefert (Markdown, Anzahl ersetzter Stellen).
+    """
+    nummern: dict[tuple[str, str], int] = {}
+    zaehler: dict[str, int] = {}
+    anzahl = 0
+    teile = ["# Anonymisiertes Dokument", ""]
+    if kopf:
+        teile += [_md_text(kopf), ""]
+    if nicht_gescannt:
+        teile += ["> Nicht enthalten, da nicht gescannt: Seite "
+                  + ", ".join(str(p + 1) for p in nicht_gescannt), ""]
+
+    for p, text, funde in seiten:
+        stuecke, pos = [], 0
+        for f in sorted(funde, key=lambda f: f.start):
+            if not gewaehlt(p, f) or f.start < pos:
+                continue
+            schluessel = (f.art, f.text.lower())
+            if schluessel not in nummern:
+                zaehler[f.art] = zaehler.get(f.art, 0) + 1
+                nummern[schluessel] = zaehler[f.art]
+            stuecke.append(_md_text(text[pos:f.start]))
+            stuecke.append(f"[{PLATZHALTER.get(f.art, 'geschwärzt')} {nummern[schluessel]}]")
+            pos = f.ende
+            anzahl += 1
+        stuecke.append(_md_text(text[pos:]))
+        zeilen = []
+        for zeile in "".join(stuecke).split("\n"):
+            zeile = zeile.rstrip()
+            if zeile:
+                zeilen.append(_MD_ZEILENANFANG.sub(_md_zeilenanfang, zeile))
+        teile += ["---", "", f"## Seite {p + 1}", ""]
+        teile.append("  \n".join(zeilen) if zeilen else "*(kein Text)*")
+        teile.append("")
+    return "\n".join(teile), anzahl

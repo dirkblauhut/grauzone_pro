@@ -1,6 +1,6 @@
 # Projektstand: Grauzone PRO
 
-Stand: 2026-11-11, Branch main, Commit 7b02fdb (Release `v0.3.2`), darauf folgt der Commit zu 0.4.0 (`macos/VERSION` = 0.4.0)
+Stand: 2026-11-11, Branch main, Commit fee11b6 (Release `v0.4.0`), darauf folgt der Commit zu 0.4.1 (`macos/VERSION` = 0.4.1)
 
 Ergänzt [UEBERGABE.md](UEBERGABE.md). Dort stehen Dateiübersicht, Funktionsweise der Mac-App, Release-Ablauf (Abschnitt 4) und Testanleitung (Abschnitt 5). Diese Datei hält Festlegungen, Learnings und Sackgassen fest und wird nicht mit UEBERGABE.md zusammengeführt.
 
@@ -16,7 +16,7 @@ Stack: Python 3.11 (Mac-App/Installer über uv), Streamlit, PyMuPDF (`fitz`), Ea
 
 Struktur:
 - `app.py`: Streamlit-Oberfläche: Hochladen, Scannen (`scanne`, Seite oder alle Seiten), Fundstellenliste, Lernen über `knowledge_base.json`, Export mit `apply_redactions()` und `set_metadata({})`.
-- `erkennung.py`: Erkennung ohne Streamlit: `woerter_aus_textebene`, `woerter_aus_ocr`, `seitentext`, `finde`, `wort_rechteck`; Datenklassen `Wort`, `Fund`.
+- `erkennung.py`: Erkennung ohne Streamlit: `woerter_aus_textebene`, `woerter_aus_ocr`, `seitentext`, `finde`, `wort_rechteck`, `markdown` (Export); Datenklassen `Wort`, `Fund`.
 - `.streamlit/config.toml`: `address = "localhost"`, `headless = true`, `gatherUsageStats = false`.
 - `macos/`: `Grauzone-launcher.sh` (App-Starter), `grauzone-start.sh` (Einrichtung und Start im Datenordner), `grauzone-update.sh` (Selbst-Update), `build_dmg.sh`, `make_icon.py`, `VERSION`.
 - `Grauzone installieren.command`, `START_GRAUZONE.command`, `starten.command`, `setup_project.py`: Einrichtung und Start aus dem Quellcode.
@@ -37,6 +37,7 @@ Festlegungen:
 | DMG nur als Release-Anhang, nicht im Repository | Commit a29a826 | `download/*.dmg` eingecheckt |
 | Auswahl je Seite in `st.session_state.auswahl` | Streamlit verwirft Zustand nicht angezeigter Widgets | Auswahl nur in Checkboxen |
 | Selbst-Update: `macos/grauzone-update.sh` liest Release-Anhang `VERSION`, lädt nach Rückfrage `grauzone-update.tar.gz`, prüft `SHA256SUMS`; Starter übernimmt Dateien aus der App nur, wenn sie neuer sind | Keine neue DMG und keine erneute Gatekeeper-Freigabe je Version | GitHub-API mit JSON (Rate-Limit, Parsing ohne Python); stilles Update ohne Rückfrage |
+| Markdown-Export aus dem gespeicherten Seitentext und denselben Funden wie das PDF (`E.markdown`), Platzhalter `[Art Nr]` je Art und Text nummeriert | PDF und Markdown schwärzen dieselben Stellen; lesbarer als Balken | Text aus dem geschwärzten PDF lesen (Lücken ohne Kennzeichnung); `pymupdf4llm` (zusätzliche AGPL-Abhängigkeit) |
 | PDF immer über `oeffne_pdf()` öffnen (Formularfelder und Anmerkungen per `doc.bake()` in die Seite) | Nur so entfernt `apply_redactions()` auch deren Text; Scan und Export sehen denselben Inhalt | Formularfelder unverändert lassen; Felder nur löschen (verliert nicht betroffene Werte) |
 
 Projektvorgaben des Nutzers:
@@ -103,10 +104,11 @@ Verworfene Ansätze:
 ## 4. Offene Aufgaben
 
 - [ ] Nächste Version (Ideen des Nutzers vom 2026-11-11, Reihenfolge offen):
-  - [ ] Zusätzlicher Export als Markdown
   - [ ] Oberfläche modern gestalten (UI/UX)
-- [ ] Release 0.4.0 mit allen vier Anhängen veröffentlichen (Priorität hoch). Wer 0.3.2 oder älter hat, braucht die DMG 0.4.0 einmalig; danach Selbst-Update
-- [ ] Selbst-Update einmal echt prüfen: nach 0.4.0 eine Version 0.4.1 veröffentlichen und die Rückfrage beim Start abwarten (mittel)
+- [ ] Release 0.4.1 mit allen vier Anhängen veröffentlichen und damit das Selbst-Update erstmals echt prüfen (Rückfrage beim Start von 0.4.0) (Priorität hoch)
+- [ ] Streamlit ist nicht gepinnt; `use_container_width` ist laut Warnung abgekündigt. Eine neue Streamlit-Version kann die App bei Neuinstallation brechen: auf `width=` umstellen oder Version begrenzen (Priorität hoch)
+- [ ] Dateiname des Exports übernimmt den Originalnamen (`Anonymisiert_<Name>`), der selbst Personennamen enthalten kann (mittel)
+- [ ] Gleiche Person in anderer Schreibweise („Mustermann, Erika“ / „Erika Mustermann“) bekommt im Markdown verschiedene Nummern (niedrig)
 - [ ] Mehrseitige echte Dokumente testen, Text- und Scan-Seiten gemischt, auch Formulare (Priorität hoch, nächster Schritt)
 - [ ] Gesundheitsangaben (Art. 9 DSGVO, z. B. „Medikation: 30 mg“), Alter und Datum werden nicht erkannt; Bedarf klären (mittel)
 - [ ] Breitere Balken bei Scans: Wortgrenzen genauer schätzen, ohne Buchstabenreste (mittel)

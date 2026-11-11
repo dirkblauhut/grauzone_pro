@@ -1,6 +1,7 @@
 import io
 import json
 import os
+from datetime import date
 
 import easyocr
 import fitz
@@ -278,12 +279,24 @@ if uploaded_file:
                 out.set_metadata({})   # Autor, Titel usw. entfernen
                 puffer = io.BytesIO()
                 out.save(puffer, garbage=4, deflate=True)
-                st.session_state.export = (puffer.getvalue(), anzahl, len(gescannt))
+                md, _ = E.markdown(
+                    [(p, st.session_state.woerter[p]["text"], funde_der_seite(p)) for p in gescannt],
+                    ist_gewaehlt,
+                    kopf=f"Erstellt mit {TITEL} am {date.today():%d.%m.%Y}. "
+                         "Gleiche Angaben tragen denselben Platzhalter.",
+                    nicht_gescannt=[p for p in range(n) if p not in st.session_state.woerter])
+                st.session_state.export = (puffer.getvalue(), md, anzahl, len(gescannt))
             if st.session_state.export:
-                daten, anzahl, seiten = st.session_state.export
+                daten, md, anzahl, seiten = st.session_state.export
                 st.success(f"{anzahl} Stellen auf {seiten} Seite(n) geschwärzt.")
-                st.download_button("📥 PDF herunterladen", daten, f"Anonymisiert_{uploaded_file.name}",
+                name = os.path.splitext(uploaded_file.name)[0]
+                d1, d2 = st.columns(2)
+                d1.download_button("📥 PDF", daten, f"Anonymisiert_{name}.pdf",
                                    mime="application/pdf", use_container_width=True)
+                d2.download_button("📝 Markdown", md.encode("utf-8"), f"Anonymisiert_{name}.md",
+                                   mime="text/markdown", use_container_width=True,
+                                   help="Text der gescannten Seiten; geschwärzte Stellen als Platzhalter "
+                                        "wie [Person 1]. Tabellen und Layout bleiben nicht erhalten.")
 
     with col_view:
         bild = seitenbild(doc, p_id, zoom_preview)

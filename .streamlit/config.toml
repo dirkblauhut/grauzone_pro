@@ -1,6 +1,12 @@
 # Keine Nutzungsstatistik an Streamlit senden (Grauzone läuft rein lokal)
 [browser]
 gatherUsageStats = false
+serverAddress = "localhost"
 
 [server]
-headless = false
+# Nur auf diesem Rechner erreichbar, nicht im Netzwerk
+address = "localhost"
+port = 8501
+# headless: keine E-Mail-Abfrage beim ersten Start; den Browser öffnen die
+# Startskripte selbst, sobald Grauzone bereit ist.
+headless = true

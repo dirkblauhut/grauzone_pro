@@ -83,4 +83,9 @@ echo ""
 # --- 5. Starten -------------------------------------------------------------
 echo "▶ Starte Grauzone … (Browser öffnet http://localhost:8501)"
 echo "   Beenden: dieses Fenster schließen oder ctrl+C drücken."
+# Browser öffnen, sobald Grauzone antwortet
+( for _ in $(seq 1 120); do
+    curl -fs -m 1 -o /dev/null http://localhost:8501/_stcore/health && { open "http://localhost:8501"; break; }
+    sleep 1
+  done ) &
 exec "$PY" -m streamlit run app.py

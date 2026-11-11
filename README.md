@@ -16,7 +16,22 @@ Grauzone PRO erkennt und schwärzt personenbezogene Daten (Namen, Orte, Organisa
 
 ---
 
-## 🚀 Installation auf dem Mac (empfohlen, ohne Terminal)
+## 💿 Installation auf dem Mac per DMG (am einfachsten)
+
+1. **[Grauzone-PRO-0.2.0.dmg herunterladen](https://github.com/dirkblauhut/grauzone_pro/raw/main/download/Grauzone-PRO-0.2.0.dmg)** und doppelklicken.
+2. **Grauzone PRO** auf den Ordner **Programme** ziehen.
+3. Grauzone PRO im Programme-Ordner öffnen. Die App ist nicht bei Apple notarisiert, deshalb fragt macOS beim ersten Mal nach:
+   - macOS 14 und älter: **Rechtsklick → „Öffnen“ → „Öffnen“**,
+   - macOS 15 und neuer: **Systemeinstellungen → Datenschutz & Sicherheit → „Dennoch öffnen“**.
+4. Beim ersten Start öffnet sich ein Terminalfenster und lädt einmalig Python 3.11, Bibliotheken und KI-Modelle (ca. 2 GB, 5–15 Minuten). Danach öffnet sich Grauzone im Browser unter <http://localhost:8501>. Später startet die App in wenigen Sekunden.
+
+Beenden: Terminalfenster schließen. Python-Umgebung, Wissensbasis und Vornamenliste liegen in `~/Library/Application Support/Grauzone PRO`. Zum vollständigen Entfernen die App und diesen Ordner löschen.
+
+Die DMG enthält nur einen kleinen Starter, keine Python-Bibliotheken. Sie wird mit `sh macos/build_dmg.sh` gebaut (Icon: `macos/make_icon.py`).
+
+---
+
+## 🚀 Installation auf dem Mac aus dem Quellcode (ohne Terminal)
 
 1. Auf dieser Seite oben **„Code“ → „Download ZIP“** wählen, die ZIP-Datei entpacken und den Ordner an einen festen Platz legen, z. B. `Dokumente/grauzone_pro`.
 2. Im Ordner **`Grauzone installieren.command`** doppelklicken.
@@ -94,6 +109,9 @@ Die fertige App liegt danach im Ordner `dist/`. `vornamen.txt` und `knowledge_ba
 
 | Datei | Zweck |
 |---|---|
+| `download/` | Fertige DMG für macOS |
+| `macos/` | Bausteine der Mac-App: Starter, Einrichtungsskript, Icon, `build_dmg.sh` |
+| `LICENSE` | MIT-Lizenz |
 | `Grauzone installieren.command` | Einrichtung und Start per Doppelklick (macOS) |
 | `START_GRAUZONE.command` | Start per Doppelklick nach der Einrichtung (`starten.command` ist gleichwertig) |
 | `app.py` | Hauptanwendung (Streamlit-Oberfläche) |
@@ -118,4 +136,6 @@ Die fertige App liegt danach im Ordner `dist/`. `vornamen.txt` und `knowledge_ba
 
 ## ⚖️ Lizenz
 
-MIT-Lizenz.
+Grauzone PRO steht unter der [MIT-Lizenz](LICENSE), © 2026 Dirk Blauhut.
+
+Die bei der Einrichtung geladenen Bibliotheken haben eigene Lizenzen, u. a. spaCy (MIT), EasyOCR und PyTorch (Apache 2.0 bzw. BSD), Streamlit (Apache 2.0) und PyMuPDF (AGPL-3.0 oder kommerziell). Sie werden nicht mit Grauzone ausgeliefert, sondern bei der Einrichtung direkt aus ihren Quellen installiert. Wer Grauzone samt Bibliotheken als Paket weitergibt (z. B. per PyInstaller), muss deren Lizenzbedingungen beachten, insbesondere die AGPL von PyMuPDF.

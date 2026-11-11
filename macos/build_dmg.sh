@@ -1,7 +1,7 @@
 #!/bin/bash
 # Baut "Grauzone PRO.app" und verpackt sie als DMG.
 #
-#   sh macos/build_dmg.sh            -> download/Grauzone-PRO-<Version>.dmg
+#   sh macos/build_dmg.sh            -> dist/Grauzone-PRO-<Version>.dmg (als Release-Anhang hochladen)
 #
 # Voraussetzung: macOS (sips, iconutil, hdiutil). Das Icon liegt fertig als
 # macos/icon_1024.png vor; neu zeichnen mit  python macos/make_icon.py macos/icon_1024.png
@@ -13,10 +13,10 @@ VERSION="$(cat macos/VERSION)"
 NAME="Grauzone PRO"
 BAU="build/dmg"
 APP="$BAU/inhalt/$NAME.app"
-ZIEL="download/Grauzone-PRO-$VERSION.dmg"
+ZIEL="dist/Grauzone-PRO-$VERSION.dmg"
 
 rm -rf "$BAU"
-mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources/grauzone" download
+mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources/grauzone" dist
 
 # --- Icon -------------------------------------------------------------------
 SET="$BAU/AppIcon.iconset"

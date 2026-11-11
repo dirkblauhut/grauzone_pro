@@ -18,7 +18,7 @@ Grauzone PRO erkennt und schwärzt personenbezogene Daten (Namen, Orte, Organisa
 
 ## 💿 Installation auf dem Mac per DMG (am einfachsten)
 
-1. **[Grauzone-PRO-0.2.0.dmg herunterladen](https://github.com/dirkblauhut/grauzone_pro/raw/main/download/Grauzone-PRO-0.2.0.dmg)** und doppelklicken.
+1. Unter **[Releases](https://github.com/dirkblauhut/grauzone_pro/releases/latest)** die Datei **`Grauzone-PRO-<Version>.dmg`** herunterladen und doppelklicken.
 2. **Grauzone PRO** auf den Ordner **Programme** ziehen.
 3. Grauzone PRO im Programme-Ordner öffnen. Die App ist nicht bei Apple notarisiert, deshalb fragt macOS beim ersten Mal nach:
    - macOS 14 und älter: **Rechtsklick → „Öffnen“ → „Öffnen“**,
@@ -27,7 +27,7 @@ Grauzone PRO erkennt und schwärzt personenbezogene Daten (Namen, Orte, Organisa
 
 Beenden: Terminalfenster schließen. Python-Umgebung, Wissensbasis und Vornamenliste liegen in `~/Library/Application Support/Grauzone PRO`. Zum vollständigen Entfernen die App und diesen Ordner löschen.
 
-Die DMG enthält nur einen kleinen Starter, keine Python-Bibliotheken. Sie wird mit `sh macos/build_dmg.sh` gebaut (Icon: `macos/make_icon.py`).
+Die DMG enthält nur einen kleinen Starter, keine Python-Bibliotheken. Sie wird mit `sh macos/build_dmg.sh` gebaut (Ergebnis in `dist/`, Icon: `macos/make_icon.py`) und als Anhang an ein GitHub-Release gehängt.
 
 ---
 
@@ -109,7 +109,6 @@ Die fertige App liegt danach im Ordner `dist/`. `vornamen.txt` und `knowledge_ba
 
 | Datei | Zweck |
 |---|---|
-| `download/` | Fertige DMG für macOS |
 | `macos/` | Bausteine der Mac-App: Starter, Einrichtungsskript, Icon, `build_dmg.sh` |
 | `LICENSE` | MIT-Lizenz |
 | `Grauzone installieren.command` | Einrichtung und Start per Doppelklick (macOS) |

@@ -19,7 +19,7 @@ fi
 
 # Programmdateien aktualisieren. Bewusst per "cat" statt "cp", damit das
 # Quarantäne-Attribut des Downloads nicht mitkopiert wird.
-for f in app.py requirements.txt VERSION; do
+for f in app.py erkennung.py requirements.txt VERSION; do
     cat "$RES/grauzone/$f" > "$DATA/$f"
 done
 cat "$RES/grauzone/streamlit-config.toml" > "$DATA/.streamlit/config.toml"

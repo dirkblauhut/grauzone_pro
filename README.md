@@ -8,11 +8,15 @@ Grauzone PRO erkennt und schwärzt personenbezogene Daten (Namen, Orte, Organisa
 
 ## ✨ Funktionen
 
-- **Erkennung per Sprachmodell:** spaCy (deutsches Modell `de_core_news_lg`, ersatzweise `de_core_news_sm`) findet Namen, Orte und Organisationen.
-- **Texterkennung (OCR):** EasyOCR liest auch gescannte PDFs.
-- **Kontext-Regeln:** Telefonnummern und Namen werden zusätzlich über Muster und Schlüsselwörter erkannt (z. B. „Herr“, „Frau“, „Tel:“).
-- **Lernende Wissensbasis:** Manuelle Korrekturen werden in `knowledge_base.json` gespeichert (Whitelist/Blacklist).
-- **Vorschau und Export:** Treffer in der Oberfläche prüfen und das geschwärzte PDF mit einem Klick speichern.
+- **Schwärzt nur, was nötig ist:** Geschwärzt werden einzelne Namen, Anschriften oder Nummern, nicht ganze Zeilen. Anrede („Frau“, „Herr“) und der übrige Text bleiben lesbar.
+- **Erkennung:** spaCy-Sprachmodell (`de_core_news_lg`, ersatzweise `de_core_news_sm`) für Personen, Orte und Organisationen, dazu feste Muster für Telefon- und Faxnummern, E-Mail-Adressen, IBAN, Straße mit Hausnummer, Postleitzahl mit Ort, Namen nach „Herr/Frau“ und eine Vornamenliste. Datumsangaben gelten nicht als Telefonnummer.
+- **Textebene oder Texterkennung:** Hat das PDF eine Textebene, nutzt Grauzone deren genaue Wortpositionen. Gescannte Seiten liest EasyOCR. Für PDFs mit eingefügten Bildern lässt sich die Texterkennung in der Seitenleiste erzwingen.
+- **Mehrseitig:** „Alle Seiten“ scannt das ganze Dokument; beim Export werden alle gescannten Seiten geschwärzt. Nicht gescannte Seiten werden vorher deutlich gemeldet.
+- **Prüfen und korrigieren:** Jede Fundstelle steht mit Art (Person, Anschrift, Telefon …) in einer Liste und ist in der Vorschau rot markiert. Abwählen = bleibt stehen; fehlende Begriffe lassen sich eintippen.
+- **Lernt mit:** Abgewählte Stellen („nie schwärzen“) und eingetippte Begriffe („immer schwärzen“) merkt sich `knowledge_base.json` für künftige Dokumente.
+- **Sauberer Export:** Der Text unter den Balken wird aus dem PDF entfernt (bei Scans die Bildpunkte), die Dokument-Metadaten (Autor, Titel) werden gelöscht.
+
+> Die Erkennung ist eine Hilfe, keine Garantie. Vor dem Weitergeben jede Seite selbst durchsehen.
 
 ---
 
@@ -96,6 +100,7 @@ python -m PyInstaller --noconfirm --onefile --windowed \
   --collect-all spacy \
   --collect-all de_core_news_lg \
   --add-data "app.py:." \
+  --add-data "erkennung.py:." \
   --add-data "vornamen.txt:." \
   --add-data "knowledge_base.json:." \
   run_app.py
@@ -114,6 +119,7 @@ Die fertige App liegt danach im Ordner `dist/`. `vornamen.txt` und `knowledge_ba
 | `Grauzone installieren.command` | Einrichtung und Start per Doppelklick (macOS) |
 | `START_GRAUZONE.command` | Start per Doppelklick nach der Einrichtung (`starten.command` ist gleichwertig) |
 | `app.py` | Hauptanwendung (Streamlit-Oberfläche) |
+| `erkennung.py` | Erkennung der Fundstellen auf Wortebene (ohne Oberfläche, einzeln testbar) |
 | `requirements.txt` | Benötigte Bibliotheken |
 | `setup_project.py` | Einfaches Installationsskript (Bibliotheken + kleines Sprachmodell) |
 | `run_app.py` | Starter für die PyInstaller-App |

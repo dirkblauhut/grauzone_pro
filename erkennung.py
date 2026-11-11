@@ -1,0 +1,242 @@
+"""Erkennung personenbezogener Daten auf Wortebene.
+
+Ablauf je PDF-Seite:
+  1. Wörter mit Position holen – aus der Textebene des PDFs oder, bei
+     gescannten Seiten, per Texterkennung (EasyOCR).
+  2. Aus den Wörtern den Seitentext zusammensetzen und darin Fundstellen
+     suchen (spaCy-Sprachmodell, Muster für Telefon, E-Mail, IBAN,
+     Anschrift, Anrede, Vornamenliste, gelernte Begriffe).
+  3. Jede Fundstelle auf die Wörter abbilden, die sie abdeckt. Geschwärzt
+     werden nur diese Wörter, nicht die ganze Zeile.
+
+Alle Positionen sind PDF-Punkte (1/72 Zoll) im Koordinatensystem von PyMuPDF.
+Das Modul kennt kein Streamlit und lässt sich daher einzeln testen.
+"""
+from __future__ import annotations
+
+import re
+from dataclasses import dataclass, field
+
+import numpy as np
+
+
+@dataclass
+class Wort:
+    text: str
+    rect: tuple[float, float, float, float]   # x0, y0, x1, y1 in PDF-Punkten
+    start: int = 0                             # Position im Seitentext
+    ende: int = 0
+    ocr: bool = False                          # Position stammt aus Texterkennung
+    geteilt: bool = False                      # aus mehrteiligem OCR-Stück geschätzt
+
+
+@dataclass
+class Fund:
+    text: str
+    art: str                                   # PER, ORT, ORG, TEL, MAIL, IBAN, ADR, LISTE
+    woerter: list[int] = field(default_factory=list)
+    start: int = 0
+    ende: int = 0
+
+
+ARTEN = {
+    "PER": "Person", "ORT": "Ort", "ORG": "Organisation", "TEL": "Telefon",
+    "MAIL": "E-Mail", "IBAN": "IBAN", "ADR": "Anschrift", "LISTE": "gelernt",
+}
+
+# --- 1. Wörter holen ----------------------------------------------------------
+
+def woerter_aus_textebene(page) -> list[list[Wort]]:
+    """Wörter aus der Textebene, gruppiert nach Zeilen."""
+    zeilen: dict[tuple[int, int], list[Wort]] = {}
+    for x0, y0, x1, y1, txt, block, zeile, _ in page.get_text("words", sort=True):
+        if txt.strip():
+            zeilen.setdefault((block, zeile), []).append(Wort(txt, (x0, y0, x1, y1)))
+    return [sorted(z, key=lambda w: w.rect[0]) for z in zeilen.values()]
+
+
+def woerter_aus_ocr(reader, page, zoom: float = 2.5) -> list[list[Wort]]:
+    """Wörter per Texterkennung, gruppiert nach Zeilen.
+
+    Mit kleinem width_ths liefert EasyOCR meist einzelne Wörter. Enthält ein
+    Stück doch mehrere Wörter, wird es anhand der Zeichenzahl anteilig zerlegt;
+    solche Positionen sind ungenau und bekommen beim Schwärzen mehr Rand.
+    """
+    import fitz
+    pix = page.get_pixmap(matrix=fitz.Matrix(zoom, zoom))
+    bild = np.frombuffer(pix.samples, dtype=np.uint8).reshape(pix.height, pix.width, pix.n)
+    if pix.n == 4:
+        bild = bild[:, :, :3]
+    stuecke = []
+    for box, txt, _sicherheit in reader.readtext(bild, width_ths=0.05):
+        xs = [p[0] / zoom for p in box]
+        ys = [p[1] / zoom for p in box]
+        stuecke.append((min(xs), min(ys), max(xs), max(ys), txt))
+
+    woerter: list[Wort] = []
+    for x0, y0, x1, y1, txt in stuecke:
+        teile = txt.split()
+        if not teile:
+            continue
+        gesamt = len(txt)
+        breite = (x1 - x0) / max(gesamt, 1)
+        pos = 0
+        for teil in teile:
+            i = txt.index(teil, pos)
+            if len(teile) == 1:
+                rect = (x0, y0, x1, y1)
+            else:
+                rect = (x0 + i * breite, y0, x0 + (i + len(teil)) * breite, y1)
+            woerter.append(Wort(teil, rect, ocr=True, geteilt=len(teile) > 1))
+            pos = i + len(teil)
+
+    # In Zeilen gruppieren: gleiche Höhe (Mittelpunkt innerhalb halber Zeilenhöhe)
+    zeilen: list[list[Wort]] = []
+    for w in sorted(woerter, key=lambda w: (w.rect[1] + w.rect[3]) / 2):
+        mitte = (w.rect[1] + w.rect[3]) / 2
+        hoehe = w.rect[3] - w.rect[1]
+        if zeilen:
+            ref = zeilen[-1][0]
+            ref_mitte = (ref.rect[1] + ref.rect[3]) / 2
+            if abs(mitte - ref_mitte) < max(hoehe, ref.rect[3] - ref.rect[1]) / 2:
+                zeilen[-1].append(w)
+                continue
+        zeilen.append([w])
+    return [sorted(z, key=lambda w: w.rect[0]) for z in zeilen]
+
+
+def seitentext(zeilen: list[list[Wort]]) -> tuple[str, list[Wort]]:
+    """Setzt den Seitentext zusammen und merkt sich jede Wortposition."""
+    teile, woerter, pos = [], [], 0
+    for z in zeilen:
+        for i, w in enumerate(z):
+            if i:
+                teile.append(" ")
+                pos += 1
+            w.start, w.ende = pos, pos + len(w.text)
+            teile.append(w.text)
+            pos = w.ende
+            woerter.append(w)
+        teile.append("\n")
+        pos += 1
+    return "".join(teile), woerter
+
+
+# --- 2. Fundstellen suchen ------------------------------------------------------
+
+GROSS = r"[A-ZÄÖÜ][a-zäöüß]+(?:-[A-ZÄÖÜ][a-zäöüß]+)?"
+MUSTER = [
+    # Anrede + Name: "Frau Erika Mustermann", "Herrn Dr. Thomas Beispiel"
+    ("PER", re.compile(rf"\b(?:Herrn?|Frau|Fr\.|Hr\.)\s+(?:(?:Dr|Prof)\.\s+)*((?:{GROSS})(?:[ \t]+{GROSS}){{0,2}})")),
+    # Telefon/Fax: beginnt mit 0 oder +, mind. 6 Ziffern, keine Datumsangabe
+    ("TEL", re.compile(r"(?<![\w.])(?:\+\d{1,3}[ \t]?(?:\(0\))?[ \t]?|0)\d{2,5}(?:[ \t/\-]?\d{2,}){1,4}(?![\w.])")),
+    ("MAIL", re.compile(r"\b[\w.+-]+@[\w-]+(?:\.[\w-]+)+\b")),
+    ("IBAN", re.compile(r"\b[A-Z]{2}\d{2}(?:[ \t]?[A-Z0-9]{4}){3,7}(?:[ \t]?[A-Z0-9]{1,4})?\b")),
+    # Postleitzahl + Ort
+    ("ADR", re.compile(rf"\b\d{{5}}[ \t]+{GROSS}(?:[ \t\-]{GROSS})?")),
+    # Straße + Hausnummer
+    ("ADR", re.compile(
+        r"\b[A-ZÄÖÜ][\wäöüß\-]*(?:straße|strasse|str\.|weg|allee|platz|gasse|ring|damm|ufer|chaussee|pfad|steig|markt)"
+        r"[ \t]+\d+[ \t]?[a-zA-Z]?\b"
+        r"|\b(?:Am|An der|Auf dem|Im|In der|Zum|Zur)[ \t]+[A-ZÄÖÜ][\wäöüß\-]+[ \t]+\d+[ \t]?[a-zA-Z]?\b")),
+]
+SPACY_ARTEN = {"PER": "PER", "LOC": "ORT", "ORG": "ORG"}
+ANREDE = re.compile(r"(?:(?:Herrn?|Frau|Fr\.|Hr\.|Dr\.|Prof\.)[ \t]+)+")
+
+
+def _ist_datum(s: str) -> bool:
+    return bool(re.fullmatch(r"\d{1,2}[./]\d{1,2}[./]\d{2,4}", s.strip()))
+
+
+def finde(text: str, woerter: list[Wort], nlp, vornamen: set[str], gelernt: list[str]) -> list[Fund]:
+    spans: list[tuple[int, int, str]] = []
+
+    if nlp is not None:
+        for ent in nlp(text).ents:
+            art = SPACY_ARTEN.get(ent.label_)
+            if not art:
+                continue
+            # Fundstellen nie über Zeilenumbrüche ziehen (sonst z. B.
+            # Absender und Anschrift als eine Stelle)
+            pos = ent.start_char
+            for teil in text[ent.start_char:ent.end_char].split("\n"):
+                spans.append((pos, pos + len(teil), art))
+                pos += len(teil) + 1
+
+    for art, rx in MUSTER:
+        for m in rx.finditer(text):
+            gruppe = 1 if m.lastindex else 0
+            s, e = m.span(gruppe)
+            if art == "TEL" and (_ist_datum(m.group(0)) or sum(c.isdigit() for c in m.group(0)) < 6):
+                continue
+            spans.append((s, e, art))
+
+    # Vornamenliste: Vorname + folgendes großgeschriebenes Wort
+    for i, w in enumerate(woerter):
+        if w.text.strip(".,;:").lower() in vornamen:
+            ende = w.ende
+            if i + 1 < len(woerter) and re.fullmatch(GROSS + r"[.,;:]?", woerter[i + 1].text) \
+                    and text[w.ende:woerter[i + 1].start].strip() == "":
+                ende = woerter[i + 1].ende
+            spans.append((w.start, ende, "PER"))
+
+    # Gelernte Begriffe (Blacklist)
+    for begriff in gelernt:
+        if len(begriff.strip()) < 2:
+            continue
+        for m in re.finditer(r"(?<!\w)" + re.escape(begriff.strip()) + r"(?!\w)", text, re.IGNORECASE):
+            spans.append((m.start(), m.end(), "LISTE"))
+
+    # Satzzeichen am Rand abschneiden, überlappende Stellen zusammenfassen
+    bereinigt = []
+    for s, e, art in spans:
+        while s < e and text[s] in " \t\n.,;:()\"'":
+            s += 1
+        while e > s and text[e - 1] in " \t\n.,;:()\"'":
+            e -= 1
+        if art == "PER":   # Anrede und Titel bleiben lesbar
+            m = ANREDE.match(text, s, e)
+            if m and m.end() < e:
+                s = m.end()
+        if e > s:
+            bereinigt.append((s, e, art))
+    bereinigt.sort()
+    zusammen: list[list] = []
+    rang = ["LISTE", "IBAN", "MAIL", "TEL", "PER", "ADR", "ORT", "ORG"]
+    for s, e, art in bereinigt:
+        if zusammen and s < zusammen[-1][1]:
+            letzte = zusammen[-1]
+            letzte[1] = max(letzte[1], e)
+            if rang.index(art) < rang.index(letzte[2]):
+                letzte[2] = art
+        else:
+            zusammen.append([s, e, art])
+
+    funde = []
+    for s, e, art in zusammen:
+        idx = [i for i, w in enumerate(woerter) if w.start < e and w.ende > s]
+        if idx:
+            funde.append(Fund(text[s:e].replace("\n", " "), art, idx, s, e))
+    return funde
+
+
+def wort_rechteck(wort: Wort, fund: Fund) -> tuple[float, float, float, float]:
+    """Rechteck nur für den Teil des Wortes, der zur Fundstelle gehört.
+
+    Beispiel: Das Wort "Mustermann," gehört ohne Komma zur Fundstelle; das
+    Komma bleibt stehen. Die Breite wird anteilig nach Zeichen berechnet.
+    """
+    x0, y0, x1, y1 = wort.rect
+    n = max(len(wort.text), 1)
+    a = max(fund.start, wort.start) - wort.start
+    b = min(fund.ende, wort.ende) - wort.start
+    breite = (x1 - x0) / n
+    if wort.ocr:
+        # Positionen aus der Texterkennung sind ungenau. Ganze Wörter bekommen
+        # 2 pt Rand; anteilig geschätzte Teile deutlich mehr, damit keine
+        # Buchstabenreste stehen bleiben.
+        zugabe = 0.8 * breite if (wort.geteilt or a > 0 or b < n) else 2.0
+        return (x0 + a * breite - zugabe, y0 - 2.0, x0 + b * breite + zugabe, y1 + 2.0)
+    zugabe = 0.35 * breite if (a > 0 or b < n) else 1.0
+    return (max(x0 - 1.0, x0 + a * breite - zugabe), y0 - 1.0,
+            min(x1 + 1.0, x0 + b * breite + zugabe), y1 + 1.0)

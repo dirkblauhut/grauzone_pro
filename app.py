@@ -1,20 +1,23 @@
-import streamlit as st
-import fitz
-from PIL import Image, ImageDraw
 import io
-import os
 import json
+import os
+
 import easyocr
+import fitz
 import spacy
-import numpy as np
-import re
+import streamlit as st
+from PIL import Image, ImageDraw
+
+import erkennung as E
 
 # --- 1. KONFIGURATION & MODELLE ---
 st.set_page_config(page_title="Grauzone PRO", layout="wide")
 
+
 @st.cache_resource
 def load_ocr():
-    return easyocr.Reader(['de', 'en'], gpu=True)
+    return easyocr.Reader(['de', 'en'], gpu=True, verbose=False)
+
 
 @st.cache_resource
 def load_nlp():
@@ -22,15 +25,12 @@ def load_nlp():
         try:
             return spacy.load(model_name)
         except OSError:
-            try:
-                spacy.cli.download(model_name)
-                return spacy.load(model_name)
-            except Exception as err:
-                st.warning(f"spaCy-Modell '{model_name}' konnte nicht geladen werden: {err}")
-                continue
+            continue
     raise RuntimeError(
-        "Kein spaCy-Modell verfügbar. Bitte installiere 'de_core_news_sm' oder stelle sicher, dass der Download funktioniert."
+        "Kein deutsches spaCy-Modell gefunden. Bitte Grauzone neu einrichten "
+        "(Installationsprogramm erneut starten)."
     )
+
 
 @st.cache_resource
 def load_names_list():
@@ -40,160 +40,213 @@ def load_names_list():
             return {line.strip().lower() for line in f if line.strip()}
     return set()
 
-reader = load_ocr()
+
 nlp = load_nlp()
 NAME_DATABASE = load_names_list()
 KNOWLEDGE_BASE = "knowledge_base.json"
 
-# --- 2. HILFSFUNKTIONEN ---
 
-def is_phone_number(text):
-    clean_digits = re.sub(r"[^\d]", "", text)
-    has_tel_format = bool(re.search(r"[\+\(\)\/\-]", text))
-    if (has_tel_format and len(clean_digits) >= 5) or len(clean_digits) >= 8:
-        return True
-    return False
-
-def analyze_text(text):
-    lower_text = text.lower().strip()
-    if is_phone_number(text):
-        return True, "TEL"
-    
-    words = re.findall(r'\w+', lower_text)
-    if any(word in NAME_DATABASE for word in words):
-        return True, "DB_MATCH"
-
-    doc = nlp(text)
-    for ent in doc.ents:
-        if ent.label_ in ["PER", "LOC", "ORG"]:
-            return True, ent.label_
-    
-    context_keywords = ["herr", "frau", "hallo", "liebe", "lieber", "geehrte", "tel", "mobil"]
-    if any(kw in lower_text for kw in context_keywords) and len(words) > 0:
-        return True, "CONTEXT_PII"
-            
-    return False, None
+# --- 2. WISSENSBASIS ---
 
 def load_knowledge():
     if os.path.exists(KNOWLEDGE_BASE):
-        with open(KNOWLEDGE_BASE, "r", encoding="utf-8") as f: 
+        with open(KNOWLEDGE_BASE, "r", encoding="utf-8") as f:
             return json.load(f)
     return {"whitelist": [], "blacklist": []}
 
+
 def save_knowledge(data):
-    with open(KNOWLEDGE_BASE, "w", encoding="utf-8") as f: 
+    with open(KNOWLEDGE_BASE, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=4)
 
-def get_pdf_page_image(doc, page_id, zoom):
-    page = doc[page_id]
-    pix = page.get_pixmap(matrix=fitz.Matrix(zoom, zoom))
-    return Image.open(io.BytesIO(pix.tobytes()))
+
+def in_liste(text, liste):
+    return text.lower() in {x.lower() for x in liste}
+
 
 # --- 3. SESSION STATE ---
-if 'last_uploaded_file' not in st.session_state:
-    st.session_state.last_uploaded_file = None
-if 'results' not in st.session_state:
-    st.session_state.results = []
+for key, start in [("last_uploaded_file", None), ("woerter", {}), ("auswahl", {}), ("export", None)]:
+    if key not in st.session_state:
+        st.session_state[key] = start
 if 'kb' not in st.session_state:
     st.session_state.kb = load_knowledge()
+kb = st.session_state.kb
 
-# --- 4. SIDEBAR (NAVIGATION & LERNFORTSCHRITT) ---
+
+# --- 4. SIDEBAR ---
 st.sidebar.title("🛡️ Grauzone PRO")
 
-# Wissens-Monitor
 with st.sidebar.expander("🧠 Lernfortschritt & Gedächtnis", expanded=False):
     col_bl, col_wl = st.columns(2)
     with col_bl:
-        st.metric("Blacklist", len(st.session_state.kb["blacklist"]))
+        st.metric("Immer schwärzen", len(kb["blacklist"]))
     with col_wl:
-        st.metric("Whitelist", len(st.session_state.kb["whitelist"]))
-    
+        st.metric("Nie schwärzen", len(kb["whitelist"]))
     if st.button("Gedächtnis löschen", use_container_width=True):
         st.session_state.kb = {"whitelist": [], "blacklist": []}
         save_knowledge(st.session_state.kb)
         st.rerun()
-    
     st.divider()
-    if st.session_state.kb["blacklist"]:
-        st.write("**Zuletzt gelernt (Blacklist):**")
-        for item in list(st.session_state.kb["blacklist"])[-5:]:
+    if kb["blacklist"]:
+        st.write("**Zuletzt gelernt (immer schwärzen):**")
+        for item in list(kb["blacklist"])[-5:]:
+            st.caption(f"• {item}")
+    if kb["whitelist"]:
+        st.write("**Zuletzt gelernt (nie schwärzen):**")
+        for item in list(kb["whitelist"])[-5:]:
             st.caption(f"• {item}")
 
 uploaded_file = st.file_uploader("PDF Dokument hochladen", type="pdf")
 
-# Reset-Logik bei neuer Datei
-if uploaded_file is not None:
-    if uploaded_file.name != st.session_state.last_uploaded_file:
-        st.session_state.results = []
-        st.session_state.last_uploaded_file = uploaded_file.name
-        st.rerun()
+if uploaded_file is not None and uploaded_file.name != st.session_state.last_uploaded_file:
+    st.session_state.last_uploaded_file = uploaded_file.name
+    st.session_state.woerter = {}
+    st.session_state.auswahl = {}
+    st.session_state.export = None
+    st.rerun()
 
+
+# --- 5. HILFSFUNKTIONEN FÜR DIE SEITE ---
+
+def scanne(doc, seiten, ocr_erzwingen):
+    """Holt die Wörter der Seiten (Textebene oder Texterkennung)."""
+    for p in seiten:
+        page = doc[p]
+        zeilen = [] if ocr_erzwingen else E.woerter_aus_textebene(page)
+        quelle = "Textebene"
+        if sum(len(z) for z in zeilen) < 3:
+            zeilen = E.woerter_aus_ocr(load_ocr(), page)
+            quelle = "Texterkennung"
+        text, woerter = E.seitentext(zeilen)
+        st.session_state.woerter[p] = {"text": text, "woerter": woerter, "quelle": quelle}
+    st.session_state.export = None
+
+
+def funde_der_seite(p):
+    daten = st.session_state.woerter.get(p)
+    if not daten:
+        return []
+    return E.finde(daten["text"], daten["woerter"], nlp, NAME_DATABASE, kb["blacklist"])
+
+
+def ist_gewaehlt(p, fund):
+    vorgabe = not in_liste(fund.text, kb["whitelist"])
+    return st.session_state.auswahl.get((p, fund.text.lower()), vorgabe)
+
+
+def rechtecke(p, fund):
+    woerter = st.session_state.woerter[p]["woerter"]
+    return [E.wort_rechteck(woerter[i], fund) for i in fund.woerter]
+
+
+def seitenbild(doc, p, zoom):
+    pix = doc[p].get_pixmap(matrix=fitz.Matrix(zoom, zoom))
+    return Image.open(io.BytesIO(pix.tobytes("png"))).convert("RGB")
+
+
+# --- 6. HAUPTBEREICH ---
 if uploaded_file:
-    file_content = uploaded_file.read()
+    file_content = uploaded_file.getvalue()
     doc = fitz.open(stream=file_content, filetype="pdf")
-    
-    p_id = st.sidebar.number_input("Seite", 0, len(doc)-1, 0)
+    n = len(doc)
+
+    p_id = st.sidebar.number_input(f"Seite (1–{n})", 1, n, 1) - 1
     zoom_preview = st.sidebar.slider("Vorschau-Zoom", 0.5, 2.0, 1.0)
-    current_img = get_pdf_page_image(doc, p_id, zoom_preview)
+    ocr_erzwingen = st.sidebar.checkbox(
+        "Immer Texterkennung (OCR) verwenden",
+        help="Normalerweise liest Grauzone die Textebene des PDFs. Nur bei Scans ohne "
+             "Textebene wird automatisch die Texterkennung genutzt. Einschalten, wenn ein "
+             "PDF Text als Bild enthält (z. B. eingefügte Scans oder Stempel).")
 
     col_view, col_ctrl = st.columns([2, 1])
 
     with col_ctrl:
         st.subheader("🕵️ Analyse")
-        if st.button("🚀 SEITE SCANNEN", use_container_width=True):
-            with st.spinner("Intensiv-Scan läuft..."):
-                high_res_img = get_pdf_page_image(doc, p_id, 2.5)
-                raw_results = reader.readtext(np.array(high_res_img.convert("RGB")))
-                scale = zoom_preview / 2.5
-                st.session_state.results = [([[p[0]*scale, p[1]*scale] for p in b], t, pr) for b, t, pr in raw_results]
-                st.rerun()
+        b1, b2 = st.columns(2)
+        if b1.button("🚀 SEITE SCANNEN", use_container_width=True):
+            with st.spinner("Seite wird gelesen …"):
+                scanne(doc, [p_id], ocr_erzwingen)
+            st.rerun()
+        if b2.button("📚 ALLE SEITEN", use_container_width=True):
+            with st.spinner(f"{n} Seiten werden gelesen …"):
+                scanne(doc, range(n), ocr_erzwingen)
+            st.rerun()
 
-        selected_items = []
-        if st.session_state.results:
-            st.write(f"**Ergebnisse Seite {p_id}:**")
-            with st.container(height=500):
-                for i, (bbox, text, prob) in enumerate(st.session_state.results):
-                    clean_text = text.strip()
-                    if len(clean_text) < 2: continue
-                    
-                    is_pii_ai, label = analyze_text(clean_text)
-                    is_black = clean_text.lower() in [x.lower() for x in st.session_state.kb["blacklist"]]
-                    is_white = clean_text.lower() in [x.lower() for x in st.session_state.kb["whitelist"]]
-                    
-                    check = (is_pii_ai or is_black) and not is_white
-                    tag = f" [{label}]" if is_pii_ai else ""
-                    
-                    # Checkbox mit Lerneffekt
-                    u_val = st.checkbox(f"{clean_text}{tag}", value=check, key=f"cb_{uploaded_file.name}_{p_id}_{i}")
-                    
-                    if u_val:
-                        selected_items.append((bbox, clean_text))
-                        # Lernen: Wenn User markiert, was die KI nicht wusste -> Blacklist
-                        if u_val != check and clean_text not in st.session_state.kb["blacklist"]:
-                            st.session_state.kb["blacklist"].append(clean_text)
-                            save_knowledge(st.session_state.kb)
-                    else:
-                        # Lernen: Wenn User Markierung entfernt -> Whitelist
-                        if u_val != check and clean_text not in st.session_state.kb["whitelist"]:
-                            st.session_state.kb["whitelist"].append(clean_text)
-                            save_knowledge(st.session_state.kb)
+        funde = funde_der_seite(p_id)
+        if p_id in st.session_state.woerter:
+            quelle = st.session_state.woerter[p_id]["quelle"]
+            st.write(f"**Fundstellen Seite {p_id + 1}** · {len(funde)} gefunden · gelesen per {quelle}")
+            with st.container(height=420):
+                if not funde:
+                    st.caption("Keine personenbezogenen Daten erkannt.")
+                for i, fund in enumerate(funde):
+                    vorgabe = not in_liste(fund.text, kb["whitelist"])
+                    wert = st.checkbox(
+                        f"{fund.text}  ·  {E.ARTEN.get(fund.art, fund.art)}",
+                        value=ist_gewaehlt(p_id, fund),
+                        key=f"cb_{uploaded_file.name}_{p_id}_{i}_{fund.text}",
+                    )
+                    st.session_state.auswahl[(p_id, fund.text.lower())] = wert
+                    # Lernen: abgewählt -> nie schwärzen; wieder gewählt -> Eintrag entfernen
+                    if not wert and vorgabe and not in_liste(fund.text, kb["whitelist"]):
+                        kb["whitelist"].append(fund.text)
+                        save_knowledge(kb)
+                    elif wert and not vorgabe:
+                        kb["whitelist"] = [x for x in kb["whitelist"] if x.lower() != fund.text.lower()]
+                        save_knowledge(kb)
 
+            with st.form("zusatz", clear_on_submit=True):
+                zusatz = st.text_input(
+                    "Fehlt etwas? Begriff eingeben (mehrere mit Komma trennen)",
+                    help="Der Begriff wird auf allen gescannten Seiten geschwärzt und für künftige Dokumente gemerkt.")
+                if st.form_submit_button("➕ Hinzufügen", use_container_width=True) and zusatz.strip():
+                    for begriff in [b.strip() for b in zusatz.split(",") if b.strip()]:
+                        if not in_liste(begriff, kb["blacklist"]):
+                            kb["blacklist"].append(begriff)
+                        kb["whitelist"] = [x for x in kb["whitelist"] if x.lower() != begriff.lower()]
+                    save_knowledge(kb)
+                    st.session_state.export = None
+                    st.rerun()
+        else:
+            st.caption("Diese Seite wurde noch nicht gescannt.")
+
+        gescannt = sorted(st.session_state.woerter)
+        if gescannt:
+            offen = [str(p + 1) for p in range(n) if p not in st.session_state.woerter]
+            if offen:
+                st.warning(f"Nicht gescannt und daher **nicht geschwärzt**: Seite {', '.join(offen)}")
             if st.button("🔒 SCHWÄRZEN & EXPORT", type="primary", use_container_width=True):
-                page = doc[p_id]
-                img_w, img_h = current_img.size
-                sc_x, sc_y = page.rect.width / img_w, page.rect.height / img_h
-                for bbox, _ in selected_items:
-                    x0, y0 = min([p[0] for p in bbox]) * sc_x, min([p[1] for p in bbox]) * sc_y
-                    x1, y1 = max([p[0] for p in bbox]) * sc_x, max([p[1] for p in bbox]) * sc_y
-                    page.add_redact_annot(fitz.Rect(x0, y0, x1, y1), fill=(0,0,0))
-                page.apply_redactions()
-                output = io.BytesIO()
-                doc.save(output)
-                st.download_button("📥 PDF herunterladen", output.getvalue(), f"Anonymisiert_{uploaded_file.name}", use_container_width=True)
+                out = fitz.open(stream=file_content, filetype="pdf")
+                anzahl = 0
+                for p in gescannt:
+                    page = out[p]
+                    for fund in funde_der_seite(p):
+                        if ist_gewaehlt(p, fund):
+                            for r in rechtecke(p, fund):
+                                page.add_redact_annot(fitz.Rect(*r), fill=(0, 0, 0))
+                                anzahl += 1
+                    page.apply_redactions()
+                out.set_metadata({})   # Autor, Titel usw. entfernen
+                puffer = io.BytesIO()
+                out.save(puffer, garbage=4, deflate=True)
+                st.session_state.export = (puffer.getvalue(), anzahl, len(gescannt))
+            if st.session_state.export:
+                daten, anzahl, seiten = st.session_state.export
+                st.success(f"{anzahl} Stellen auf {seiten} Seite(n) geschwärzt.")
+                st.download_button("📥 PDF herunterladen", daten, f"Anonymisiert_{uploaded_file.name}",
+                                   mime="application/pdf", use_container_width=True)
 
     with col_view:
-        draw_img = current_img.copy()
-        draw = ImageDraw.Draw(draw_img)
-        for bbox, _ in selected_items:
-            draw.polygon([tuple(p) for p in bbox], outline="red", width=3)
-        st.image(draw_img, use_container_width=True, caption="Vorschau")
+        bild = seitenbild(doc, p_id, zoom_preview)
+        draw = ImageDraw.Draw(bild, "RGBA")
+        if p_id in st.session_state.woerter:
+            for fund in funde:
+                gewaehlt = ist_gewaehlt(p_id, fund)
+                for x0, y0, x1, y1 in rechtecke(p_id, fund):
+                    box = [x0 * zoom_preview, y0 * zoom_preview, x1 * zoom_preview, y1 * zoom_preview]
+                    if gewaehlt:
+                        draw.rectangle(box, fill=(220, 30, 30, 70), outline=(200, 0, 0, 255), width=2)
+                    else:
+                        draw.rectangle(box, outline=(150, 150, 150, 255), width=1)
+        st.image(bild, use_container_width=True,
+                 caption="Vorschau · rot = wird geschwärzt, grau = abgewählt")

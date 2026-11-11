@@ -49,7 +49,7 @@ EOF
 cp macos/Grauzone-launcher.sh "$APP/Contents/MacOS/Grauzone"
 cp macos/grauzone-start.sh "$APP/Contents/Resources/grauzone-start.sh"
 chmod +x "$APP/Contents/MacOS/Grauzone" "$APP/Contents/Resources/grauzone-start.sh"
-cp app.py requirements.txt "$APP/Contents/Resources/grauzone/"
+cp app.py erkennung.py requirements.txt "$APP/Contents/Resources/grauzone/"
 cp .streamlit/config.toml "$APP/Contents/Resources/grauzone/streamlit-config.toml"
 cp macos/VERSION "$APP/Contents/Resources/grauzone/VERSION"
 cp LICENSE "$APP/Contents/Resources/LICENSE"

@@ -15,6 +15,14 @@ fehler() {
 }
 
 export PATH="$HOME/.local/bin:$HOME/.cargo/bin:/opt/homebrew/bin:/usr/local/bin:$PATH"
+
+# Nach neuer Version suchen (fragt vorher nach, abschaltbar). Nach einem
+# Update dieses Skript in seiner neuen Fassung erneut starten.
+if [ -f grauzone-update.sh ]; then
+    bash ./grauzone-update.sh
+    [ $? -eq 10 ] && exec bash "$0"
+fi
+
 PY="$(pwd)/venv/bin/python"
 STAND="$(cat VERSION requirements.txt | shasum | cut -d' ' -f1)"
 

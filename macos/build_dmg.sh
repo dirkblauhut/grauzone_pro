@@ -1,7 +1,9 @@
 #!/bin/bash
 # Baut "Grauzone PRO.app" und verpackt sie als DMG.
 #
-#   sh macos/build_dmg.sh            -> dist/Grauzone-PRO-<Version>.dmg (als Release-Anhang hochladen)
+#   sh macos/build_dmg.sh            -> dist/Grauzone-PRO-<Version>.dmg
+#                                       dist/grauzone-update.tar.gz, dist/SHA256SUMS, dist/VERSION
+#   Alle vier als Release-Anhang hochladen (die letzten drei braucht das Selbst-Update).
 #
 # Voraussetzung: macOS (sips, iconutil, hdiutil). Das Icon liegt fertig als
 # macos/icon_1024.png vor; neu zeichnen mit  python macos/make_icon.py macos/icon_1024.png
@@ -49,7 +51,7 @@ EOF
 cp macos/Grauzone-launcher.sh "$APP/Contents/MacOS/Grauzone"
 cp macos/grauzone-start.sh "$APP/Contents/Resources/grauzone-start.sh"
 chmod +x "$APP/Contents/MacOS/Grauzone" "$APP/Contents/Resources/grauzone-start.sh"
-cp app.py erkennung.py requirements.txt "$APP/Contents/Resources/grauzone/"
+cp app.py erkennung.py requirements.txt macos/grauzone-update.sh "$APP/Contents/Resources/grauzone/"
 cp .streamlit/config.toml "$APP/Contents/Resources/grauzone/streamlit-config.toml"
 cp macos/VERSION "$APP/Contents/Resources/grauzone/VERSION"
 cp LICENSE "$APP/Contents/Resources/LICENSE"
@@ -77,7 +79,10 @@ INSTALLIEREN
 
 BENUTZEN
 - Starten: Grauzone PRO öffnen. Beenden: das Terminalfenster schließen.
-- Alles läuft lokal. Internet wird nur für die Einrichtung gebraucht.
+- Alles läuft lokal. Internet wird nur für die Einrichtung gebraucht und,
+  falls nicht abgeschaltet, beim Start für die Frage nach einer neuen
+  Version (nur die Versionsnummer, keine Dokumente). Updates werden erst
+  nach Rückfrage installiert.
 
 DATEN UND ENTFERNEN
 Python-Umgebung, Wissensbasis (knowledge_base.json) und Vornamenliste
@@ -97,5 +102,17 @@ SetFile -a C "$MOUNT" 2>/dev/null || true       # Volume-Icon aktivieren
 hdiutil detach -quiet "$MOUNT"
 hdiutil convert -quiet "$BAU/roh.dmg" -format UDZO -imagekey zlib-level=9 -o "$ZIEL"
 rm -rf "$BAU"
+
+# --- Update-Paket für das Selbst-Update (grauzone-update.sh) -----------------
+# Release-Anhänge: VERSION, grauzone-update.tar.gz, SHA256SUMS
+PAKET="build/update"
+rm -rf "$PAKET"; mkdir -p "$PAKET"
+cp app.py erkennung.py requirements.txt macos/VERSION macos/grauzone-start.sh macos/grauzone-update.sh "$PAKET/"
+cp .streamlit/config.toml "$PAKET/streamlit-config.toml"
+COPYFILE_DISABLE=1 tar -czf dist/grauzone-update.tar.gz -C "$PAKET" \
+    app.py erkennung.py requirements.txt VERSION streamlit-config.toml grauzone-start.sh grauzone-update.sh
+( cd dist && shasum -a 256 grauzone-update.tar.gz > SHA256SUMS )
+cp macos/VERSION dist/VERSION
+rm -rf "$PAKET"
 
 echo "Fertig: $ZIEL ($(du -h "$ZIEL" | cut -f1))"

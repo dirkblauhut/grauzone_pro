@@ -2,7 +2,7 @@
 
 Grauzone PRO erkennt und schwärzt personenbezogene Daten (Namen, Orte, Organisationen, Telefonnummern) in PDF-Dokumenten.
 
-**Alles läuft lokal auf dem eigenen Rechner.** Dokumente werden nicht in eine Cloud hochgeladen. Internet braucht es nur einmal bei der Einrichtung, um Programmbibliotheken und KI-Modelle herunterzuladen.
+**Alles läuft lokal auf dem eigenen Rechner.** Dokumente werden nicht in eine Cloud hochgeladen. Internet braucht es bei der Einrichtung, um Programmbibliotheken und KI-Modelle herunterzuladen. Die Mac-App fragt außerdem beim Start bei GitHub die neueste Versionsnummer ab (abschaltbar, keine Dokumentinhalte).
 
 ---
 
@@ -28,6 +28,8 @@ Grauzone PRO erkennt und schwärzt personenbezogene Daten (Namen, Orte, Organisa
    - macOS 14 und älter: **Rechtsklick → „Öffnen“ → „Öffnen“**,
    - macOS 15 und neuer: **Systemeinstellungen → Datenschutz & Sicherheit → „Dennoch öffnen“**.
 4. Beim ersten Start öffnet sich ein Terminalfenster und lädt einmalig Python 3.11, Bibliotheken und KI-Modelle (ca. 2 GB, 5–15 Minuten). Danach öffnet sich Grauzone im Browser unter <http://localhost:8501>. Später startet die App in wenigen Sekunden.
+
+**Updates:** Ab Version 0.4.0 sucht Grauzone beim Start nach einer neuen Version und fragt im Terminalfenster, ob sie installiert werden soll. Eine neue DMG und eine erneute Freigabe in macOS sind dafür nicht nötig. Abschalten lässt sich das in der Seitenleiste („Beim Start nach neuen Versionen suchen“).
 
 Beenden: Terminalfenster schließen. Python-Umgebung, Wissensbasis und Vornamenliste liegen in `~/Library/Application Support/Grauzone PRO`. Zum vollständigen Entfernen die App und diesen Ordner löschen.
 

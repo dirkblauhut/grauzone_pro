@@ -1,6 +1,6 @@
 # Übergabe: Grauzone PRO
 
-Stand: 11.11.2026, Version **0.3.2** (Release für 0.3.2 noch nicht veröffentlicht; zuletzt veröffentlicht: `v0.3.0`; `v0.3.1` nur als Tag)
+Stand: 11.11.2026, Version **0.4.0** (Release `v0.4.0` noch nicht veröffentlicht; zuletzt veröffentlicht: `v0.3.2`; `v0.3.1` nur als Tag)
 
 Dieses Dokument fasst zusammen, wie das Projekt aufgebaut ist, wie man eine neue Version herausbringt und was noch offen ist. Für Nutzerinnen und Nutzer ist die [README](README.md) gedacht.
 
@@ -38,20 +38,23 @@ Lokale Daten (nicht im Repository): `knowledge_base.json` (gelernte Begriffe: `b
 
 Die DMG (~470 KB) enthält nur einen Starter, keine Bibliotheken.
 
-1. `Grauzone PRO.app/Contents/MacOS/Grauzone` (= `macos/Grauzone-launcher.sh`) kopiert `app.py`, `erkennung.py`, `requirements.txt`, `VERSION` und die Streamlit-Einstellungen nach `~/Library/Application Support/Grauzone PRO` (per `cat`, damit kein Quarantäne-Attribut mitkommt) und öffnet dort `Grauzone starten.command` im Terminal.
-2. `Grauzone starten.command` (= `macos/grauzone-start.sh`) richtet beim ersten Start oder nach einer Änderung an `VERSION`/`requirements.txt` alles ein: uv, Python 3.11, Bibliotheken, spaCy-Modelle, EasyOCR-Modelle (~2 GB). Merker: Datei `.eingerichtet` mit Prüfsumme.
-3. Danach startet Streamlit; ein Hintergrundprozess öffnet den Browser, sobald `/_stcore/health` antwortet. Terminalfenster schließen = Grauzone beenden.
+1. `Grauzone PRO.app/Contents/MacOS/Grauzone` (= `macos/Grauzone-launcher.sh`) kopiert `app.py`, `erkennung.py`, `requirements.txt`, `VERSION`, `grauzone-update.sh` und die Streamlit-Einstellungen nach `~/Library/Application Support/Grauzone PRO` (per `cat`, damit kein Quarantäne-Attribut mitkommt), aber nur, wenn die Version der App neuer ist als die im Datenordner. Dann öffnet er dort `Grauzone starten.command` im Terminal.
+2. `Grauzone starten.command` ruft zuerst `grauzone-update.sh` (= `macos/grauzone-update.sh`) auf: Selbst-Update, siehe unten.
+3. `Grauzone starten.command` (= `macos/grauzone-start.sh`) richtet beim ersten Start oder nach einer Änderung an `VERSION`/`requirements.txt` alles ein: uv, Python 3.11, Bibliotheken, spaCy-Modelle, EasyOCR-Modelle (~2 GB). Merker: Datei `.eingerichtet` mit Prüfsumme.
+4. Danach startet Streamlit; ein Hintergrundprozess öffnet den Browser, sobald `/_stcore/health` antwortet. Terminalfenster schließen = Grauzone beenden.
 
 Die App ist nur ad hoc signiert, nicht notarisiert. macOS fragt beim ersten Öffnen nach (Rechtsklick → Öffnen bzw. „Dennoch öffnen“).
+
+**Selbst-Update (ab 0.4.0):** `grauzone-update.sh` liest `https://github.com/dirkblauhut/grauzone_pro/releases/latest/download/VERSION`. Ist diese Version neuer, fragt es im Terminal nach (`[j/N]`, nach 120 s „nein“). Bei „j“ lädt es `grauzone-update.tar.gz` und `SHA256SUMS` des Releases, prüft Prüfsumme, Vollständigkeit und Versionsangabe und ersetzt die Dateien per `mv`. Mit Rückgabe 10 startet sich das Startskript in der neuen Fassung neu. Per `curl` geladene Dateien tragen kein Quarantäne-Kennzeichen, eine neue Freigabe in macOS entfällt. Abschalten: Schalter in der Seitenleiste (legt `.keine-updatepruefung` im Datenordner an). Zum Testen lässt sich die Quelle mit der Umgebungsvariable `GRAUZONE_UPDATE_URL` auf einen lokalen Server umlenken. Der Starter in der .app selbst wird nur über eine neue DMG aktualisiert.
 
 ## 4. Neue Version herausbringen
 
 1. Änderungen machen und testen (siehe Abschnitt 5).
 2. Versionsnummer in `macos/VERSION` erhöhen. Dadurch prüft die App beim nächsten Start ihre Einrichtung neu.
-3. Neue Dateien, die die App braucht, in `macos/Grauzone-launcher.sh` (Kopierschleife) **und** `macos/build_dmg.sh` (`cp … Resources/grauzone/`) eintragen.
-4. `sh macos/build_dmg.sh` → `dist/Grauzone-PRO-<Version>.dmg` (der Ordner `dist/` wird nicht eingecheckt).
+3. Neue Dateien, die die App braucht, in `macos/Grauzone-launcher.sh` (Kopierschleife), `macos/build_dmg.sh` (`cp … Resources/grauzone/` **und** Update-Paket) sowie in `macos/grauzone-update.sh` (`DATEIEN` und Ersetzen) eintragen.
+4. `sh macos/build_dmg.sh` → in `dist/`: `Grauzone-PRO-<Version>.dmg`, `grauzone-update.tar.gz`, `SHA256SUMS`, `VERSION` (der Ordner `dist/` wird nicht eingecheckt).
 5. Commit, Tag `v<Version>` setzen, beides pushen.
-6. Auf GitHub unter *Releases → Draft a new release* das Tag wählen und die DMG anhängen. Die README verlinkt immer auf `releases/latest`.
+6. Release mit **allen vier** Dateien anlegen und als neuestes markieren, z. B. `gh release create v<Version> dist/Grauzone-PRO-<Version>.dmg dist/grauzone-update.tar.gz dist/SHA256SUMS dist/VERSION --title "Grauzone PRO <Version>" --notes-file <Datei> --latest`. Ohne `VERSION`, Paket und Prüfsumme findet das Selbst-Update die Version nicht. Die README verlinkt immer auf `releases/latest`.
 
 ## 5. Testen
 
@@ -89,3 +92,4 @@ Die App ist nur ad hoc signiert, nicht notarisiert. macOS fragt beim ersten Öff
 | 0.3.0 | 11.11.2026 | Schwärzung auf Wortebene, mehr Muster, alle Seiten, Begriffe ergänzen, Metadaten entfernen |
 | 0.3.1 | 11.11.2026 | Formularfelder und Anmerkungen werden mitgeschwärzt (vorher blieb ihr Text lesbar) |
 | 0.3.2 | 11.11.2026 | Starter beendet nach einem Update einen noch laufenden alten Server; Versionsnummer in der Seitenleiste |
+| 0.4.0 | 11.11.2026 | Selbst-Update von GitHub nach Rückfrage, abschaltbar in der Seitenleiste |

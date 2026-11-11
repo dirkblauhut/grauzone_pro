@@ -91,6 +91,22 @@ kb = st.session_state.kb
 # --- 4. SIDEBAR ---
 st.sidebar.title(f"🛡️ {TITEL}")
 
+# Selbst-Update der Mac-App (grauzone-update.sh liegt nur im Datenordner der App)
+if os.path.exists("grauzone-update.sh"):
+    SPERRE = ".keine-updatepruefung"
+    # Fester key statt value=: sonst entstünde bei jeder Änderung ein neues
+    # Widget und die Auswahl spränge zurück.
+    if "update_pruefen" not in st.session_state:
+        st.session_state.update_pruefen = not os.path.exists(SPERRE)
+    pruefen = st.sidebar.toggle(
+        "Beim Start nach neuen Versionen suchen", key="update_pruefen",
+        help="Fragt beim Start von Grauzone bei GitHub nur die neueste Versionsnummer ab, "
+             "keine Dokumentinhalte. Installiert wird erst nach Rückfrage im Terminalfenster.")
+    if pruefen and os.path.exists(SPERRE):
+        os.remove(SPERRE)
+    elif not pruefen and not os.path.exists(SPERRE):
+        open(SPERRE, "w").close()
+
 with st.sidebar.expander("🧠 Lernfortschritt & Gedächtnis", expanded=False):
     col_bl, col_wl = st.columns(2)
     with col_bl:

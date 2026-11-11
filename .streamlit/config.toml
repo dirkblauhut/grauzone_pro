@@ -10,3 +10,12 @@ port = 8501
 # headless: keine E-Mail-Abfrage beim ersten Start; den Browser öffnen die
 # Startskripte selbst, sobald Grauzone bereit ist.
 headless = true
+
+[theme]
+# Heller Stil mit Dunkelblau (Testversion, Branch redesign)
+base = "light"
+primaryColor = "#1d4ed8"
+backgroundColor = "#f4f6fa"
+secondaryBackgroundColor = "#eef2f7"
+textColor = "#101828"
+baseRadius = "0.6rem"

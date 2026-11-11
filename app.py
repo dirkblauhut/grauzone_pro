@@ -90,59 +90,7 @@ if 'kb' not in st.session_state:
 kb = st.session_state.kb
 
 
-# --- 4. SIDEBAR ---
-st.sidebar.title(f"🛡️ {TITEL}")
-
-# Selbst-Update der Mac-App (grauzone-update.sh liegt nur im Datenordner der App)
-if os.path.exists("grauzone-update.sh"):
-    SPERRE = ".keine-updatepruefung"
-    # Fester key statt value=: sonst entstünde bei jeder Änderung ein neues
-    # Widget und die Auswahl spränge zurück.
-    if "update_pruefen" not in st.session_state:
-        st.session_state.update_pruefen = not os.path.exists(SPERRE)
-    pruefen = st.sidebar.toggle(
-        "Beim Start nach neuen Versionen suchen", key="update_pruefen",
-        help="Fragt beim Start von Grauzone bei GitHub nur die neueste Versionsnummer ab, "
-             "keine Dokumentinhalte. Installiert wird erst nach Rückfrage im Terminalfenster.")
-    if pruefen and os.path.exists(SPERRE):
-        os.remove(SPERRE)
-    elif not pruefen and not os.path.exists(SPERRE):
-        open(SPERRE, "w").close()
-
-with st.sidebar.expander("🧠 Lernfortschritt & Gedächtnis", expanded=False):
-    col_bl, col_wl = st.columns(2)
-    with col_bl:
-        st.metric("Immer schwärzen", len(kb["blacklist"]))
-    with col_wl:
-        st.metric("Nie schwärzen", len(kb["whitelist"]))
-    if st.button("Gedächtnis löschen", width="stretch"):
-        st.session_state.kb = {"whitelist": [], "blacklist": []}
-        save_knowledge(st.session_state.kb)
-        st.rerun()
-    st.divider()
-    if kb["blacklist"]:
-        st.write("**Zuletzt gelernt (immer schwärzen):**")
-        for item in list(kb["blacklist"])[-5:]:
-            st.caption(f"• {item}")
-    if kb["whitelist"]:
-        st.write("**Zuletzt gelernt (nie schwärzen):**")
-        for item in list(kb["whitelist"])[-5:]:
-            st.caption(f"• {item}")
-
-uploaded_file = st.file_uploader("PDF Dokument hochladen", type="pdf")
-
-if uploaded_file is not None and uploaded_file.name != st.session_state.last_uploaded_file:
-    st.session_state.last_uploaded_file = uploaded_file.name
-    st.session_state.woerter = {}
-    st.session_state.auswahl = {}
-    st.session_state.export = None
-    st.session_state.funde_speicher = {}
-    st.session_state.seite = 1
-    st.session_state.gezeigt = None
-    st.rerun()
-
-
-# --- 5. HILFSFUNKTIONEN FÜR DIE SEITE ---
+# --- 4. HILFSFUNKTIONEN FÜR DIE SEITE ---
 
 def scanne(doc, seiten, ocr_erzwingen):
     """Holt die Wörter der Seiten (Textebene oder Texterkennung)."""
@@ -235,55 +183,301 @@ def zur_seite_scrollen(p):
     st.session_state.scroll_nr = st.session_state.get("scroll_nr", 0) + 1
 
 
-# --- 6. HAUPTBEREICH ---
-if uploaded_file:
-    file_content = uploaded_file.getvalue()
-    doc = oeffne_pdf(file_content)
-    n = len(doc)
+# --- 5. OBERFLÄCHE: Kopfzeile, drei Spalten (Dokument | Vorschau | Fundstellen) ---
 
-    datei_id = (uploaded_file.name, len(file_content))
-    if not 1 <= st.session_state.get("seite", 1) <= n:
-        st.session_state.seite = 1
-    p_id = st.sidebar.number_input(f"Seite (1–{n})", 1, n, key="seite") - 1
-    alle_zeigen = st.sidebar.toggle(
-        "Alle Seiten untereinander zeigen", value=n > 1,
-        help="Die Vorschau zeigt alle Seiten zum Durchscrollen. Die Fundstellen-Liste "
-             "rechts gehört zur gewählten Seite; wählen per „Bearbeiten“, Pfeilen oder Seitenzahl.")
-    zoom_preview = st.sidebar.slider("Vorschau-Zoom", 0.5, 2.0, 1.0)
-    ocr_erzwingen = st.sidebar.checkbox(
-        "Immer Texterkennung (OCR) verwenden",
-        help="Normalerweise liest Grauzone die Textebene des PDFs. Nur bei Scans ohne "
-             "Textebene wird automatisch die Texterkennung genutzt. Einschalten, wenn ein "
-             "PDF Text als Bild enthält (z. B. eingefügte Scans oder Stempel).")
+STIL = """<style>
+:root { --gz-navy:#0f2747; --gz-blau:#1d4ed8; --gz-rot:#d92d20; --gz-grau:#98a2b3;
+        --gz-rand:#e4e7ec; --gz-text2:#667085; }
+header[data-testid="stHeader"] { display:none; }
+[data-testid="stMainBlockContainer"] { padding:0 1.2rem 3.2rem 1.2rem; max-width:none; }
+[data-testid="stSidebar"], [data-testid="stSidebarCollapsedControl"] { display:none; }
+/* Kopfzeile */
+.st-key-kopfzeile { background:var(--gz-navy); margin:-1rem -1.2rem .8rem -1.2rem; padding:.55rem 1.4rem; }
+.st-key-kopfzeile [data-testid="stPopover"] button { background:transparent; color:#fff; border-color:#2a4f80; }
+.gz-kopf { color:#fff; display:flex; align-items:center; gap:1rem; }
+.gz-logo { font-size:1.6rem; line-height:1; }
+.gz-name { font-size:1.35rem; font-weight:700; letter-spacing:.2px; }
+.gz-name b { color:#7dd3fc; font-weight:700; }
+.gz-claim { color:#cbd5e1; font-size:.9rem; border-left:1px solid #334e73; padding-left:1rem; }
+.gz-rechts { margin-left:auto; display:flex; gap:.6rem; align-items:center; font-size:.85rem; }
+.gz-badge { background:#16365f; border:1px solid #2a4f80; border-radius:999px; padding:.15rem .7rem; }
+.gz-badge .punkt { color:#4ade80; }
+.gz-test { background:#b45309; border-color:#d97706; }
+/* Karten */
+[class*="st-key-karte"] { background:#fff; border:1px solid var(--gz-rand) !important;
+    border-radius:12px; box-shadow:0 1px 2px rgba(16,24,40,.05); }
+.gz-titel { font-weight:650; font-size:.98rem; margin:0 0 .2rem 0; display:flex; gap:.45rem; align-items:center; }
+.gz-klein { color:var(--gz-text2); font-size:.82rem; }
+/* Hochladen als gestrichelte Fläche */
+[data-testid="stFileUploaderDropzone"] { border:1.5px dashed #b6c2d9; background:#f8fafc; border-radius:10px; }
+/* Fundstellen-Karten: rot = wird geschwärzt, grau = freigegeben */
+[class*="st-key-fund_an"] { border-left:4px solid var(--gz-rot) !important; background:#fff; }
+[class*="st-key-fund_aus"] { border-left:4px solid var(--gz-grau) !important; background:#f9fafb; }
+[class*="st-key-fund_"] { border-radius:10px; }
+.gz-art { display:inline-block; font-size:.75rem; color:var(--gz-text2); }
+[class*="st-key-fund_"] { gap:0 !important; padding:.45rem .7rem !important; }
+[class*="st-key-karte"] { gap:.55rem; }
+[data-testid="stButtonGroup"] button { padding:.15rem .55rem; min-height:1.9rem; font-size:.8rem; }
+.gz-zahl { font-size:1.35rem; font-weight:700; color:#101828; }
+/* Werkzeugleiste über der Vorschau */
+[class*="st-key-leiste"] { background:#fff; border:1px solid var(--gz-rand); border-radius:10px; padding:.25rem .4rem; }
+.gz-mitte { text-align:center; padding-top:.45rem; font-size:.9rem; color:#344054; }
+/* Legende unter der Vorschau */
+.gz-legende { margin:.5rem auto 0 auto; width:max-content; background:#1f2937; color:#f3f4f6;
+              border-radius:999px; padding:.25rem .9rem; font-size:.8rem; }
+.gz-legende .rot { color:#f87171; } .gz-legende .grau { color:#9ca3af; }
+/* Statuszeile unten */
+.gz-status { position:fixed; left:0; right:0; bottom:0; z-index:100; background:#fff;
+             border-top:1px solid var(--gz-rand); padding:.45rem 1.4rem; font-size:.85rem; color:#344054; }
+.gz-status .ok { color:#16a34a; } .gz-status .warn { color:#b45309; }
+</style>"""
+st.markdown(STIL, unsafe_allow_html=True)
 
-    col_view, col_ctrl = st.columns([2, 1])
+kopfzeile = st.container(key="kopfzeile")
+kopf_l, kopf_r = kopfzeile.columns([12, 1], vertical_alignment="center")
+kopf_l.markdown(
+    f"""<div class="gz-kopf"><span class="gz-logo">🛡️</span>
+    <span class="gz-name">Grauzone <b>PRO</b></span>
+    <span class="gz-claim">Personenbezogene Daten erkennen. Sicher schwärzen.</span>
+    <span class="gz-rechts"><span class="gz-badge gz-test">Testversion</span>
+    <span class="gz-badge"><span class="punkt">●</span> Lokal · v{VERSION}</span></span></div>""",
+    unsafe_allow_html=True)
+with kopf_r.popover("⚙️", help="Einstellungen", width="stretch"):
+    st.markdown("**Einstellungen**")
+    # Selbst-Update der Mac-App (grauzone-update.sh liegt nur im Datenordner der App)
+    if os.path.exists("grauzone-update.sh"):
+        SPERRE = ".keine-updatepruefung"
+        # Fester key statt value=: sonst entstünde bei jeder Änderung ein neues
+        # Widget und die Auswahl spränge zurück.
+        if "update_pruefen" not in st.session_state:
+            st.session_state.update_pruefen = not os.path.exists(SPERRE)
+        pruefen = st.toggle(
+            "Beim Start nach neuen Versionen suchen", key="update_pruefen",
+            help="Fragt beim Start von Grauzone bei GitHub nur die neueste Versionsnummer ab, "
+                 "keine Dokumentinhalte. Installiert wird erst nach Rückfrage im Terminalfenster.")
+        if pruefen and os.path.exists(SPERRE):
+            os.remove(SPERRE)
+        elif not pruefen and not os.path.exists(SPERRE):
+            open(SPERRE, "w").close()
+    st.caption("Alle Verarbeitung findet auf diesem Rechner statt. Es werden keine "
+               "Dokumentinhalte übertragen.")
 
-    with col_ctrl:
-        st.subheader("🕵️ Analyse")
-        b1, b2 = st.columns(2)
-        if b1.button("🚀 SEITE SCANNEN", width="stretch"):
-            with st.spinner("Seite wird gelesen …"):
-                scanne(doc, [p_id], ocr_erzwingen)
-            st.rerun()
-        if b2.button("📚 ALLE SEITEN", width="stretch"):
+col_l, col_m, col_r = st.columns([1.05, 2.55, 1.45], gap="medium")
+
+
+def titel(symbol, text, klein=""):
+    zusatz = f"<span class='gz-klein'>{klein}</span>" if klein else ""
+    st.markdown(f"<div class='gz-titel'>{symbol} {text} {zusatz}</div>", unsafe_allow_html=True)
+
+
+# --- Linke Spalte: Hochladen, Dokument, Analyse, Lernfortschritt, Seitenübersicht ---
+with col_l:
+    karte_upload = st.container(border=True, key="karte_upload")
+    with karte_upload:
+        uploaded_file = st.file_uploader("PDF hochladen", type="pdf", label_visibility="collapsed",
+                                         help="PDF hierher ziehen oder auswählen. Die Datei bleibt auf diesem Rechner.")
+
+if uploaded_file is not None and uploaded_file.name != st.session_state.last_uploaded_file:
+    st.session_state.last_uploaded_file = uploaded_file.name
+    st.session_state.woerter = {}
+    st.session_state.auswahl = {}
+    st.session_state.export = None
+    st.session_state.funde_speicher = {}
+    st.session_state.seite = 1
+    st.session_state.gezeigt = None
+    st.rerun()
+
+if not uploaded_file:
+    with col_l:
+        with st.container(border=True, key="karte_lernen_leer"):
+            titel("🧠", "Lernfortschritt")
+            st.caption(f"{len(kb['blacklist'])} Begriffe immer schwärzen · "
+                       f"{len(kb['whitelist'])} nie schwärzen")
+    with col_m:
+        with st.container(border=True, key="karte_leer"):
+            st.markdown("### PDF hochladen, um zu beginnen")
+            st.markdown(
+                "1. Links ein PDF hochladen.\n"
+                "2. **Alle Seiten scannen**: Grauzone sucht Namen, Anschriften, Telefonnummern, "
+                "E-Mail-Adressen und IBANs.\n"
+                "3. Rechts die Fundstellen prüfen: Haken = wird geschwärzt.\n"
+                "4. **Schwärzen & exportieren**: PDF ohne die Daten und optional Markdown.")
+            st.caption("Grauzone arbeitet vollständig lokal. Dokumente verlassen diesen Rechner nicht.")
+    st.markdown("<div class='gz-status'>Bereit. Kein Dokument geladen.</div>", unsafe_allow_html=True)
+    st.stop()
+
+file_content = uploaded_file.getvalue()
+doc = oeffne_pdf(file_content)
+n = len(doc)
+datei_id = (uploaded_file.name, len(file_content))
+if not 1 <= st.session_state.get("seite", 1) <= n:
+    st.session_state.seite = 1
+for key, start in [("zoom", 1.0), ("alle_zeigen", n > 1), ("filter", "Alle")]:
+    st.session_state.setdefault(key, start)
+p_id = st.session_state.seite - 1
+
+
+def haken_key(p, i, fund):
+    return f"cb_{uploaded_file.name}_{p}_{i}_{fund.text}"
+
+
+# Haken der Fundstellen-Liste übernehmen, bevor Vorschau und Zähler gezeichnet
+# werden: Die Liste steht rechts und wird erst nach der Vorschau ausgeführt.
+for i, fund in enumerate(funde_der_seite(p_id)):
+    if haken_key(p_id, i, fund) in st.session_state:
+        neu = st.session_state[haken_key(p_id, i, fund)]
+        if st.session_state.auswahl.get((p_id, fund.text.lower())) != neu:
+            st.session_state.auswahl[(p_id, fund.text.lower())] = neu
+            st.session_state.export = None   # Export passt nicht mehr zur Auswahl
+
+
+def zoom_aendern(schritt):
+    st.session_state.zoom = min(2.0, max(0.5, round(st.session_state.zoom + schritt, 2)))
+
+
+with col_l:
+    with karte_upload:
+        groesse = len(file_content) / 1024
+        groesse = f"{groesse:.0f} KB" if groesse < 1024 else f"{groesse / 1024:.1f} MB"
+        st.markdown(f"<span class='gz-klein'>📄 {groesse} · {n} Seite(n) · bleibt auf diesem Rechner</span>",
+                    unsafe_allow_html=True)
+
+    with st.container(border=True, key="karte_analyse"):
+        titel("⚙️", "Analyse & Einstellungen")
+        ocr_erzwingen = st.toggle(
+            "Immer Texterkennung (OCR)",
+            help="Normalerweise liest Grauzone die Textebene des PDFs. Nur bei Scans ohne "
+                 "Textebene wird automatisch die Texterkennung genutzt. Einschalten, wenn ein "
+                 "PDF Text als Bild enthält (z. B. eingefügte Scans oder Stempel).")
+        if st.button("📚 Alle Seiten scannen", type="primary", width="stretch"):
             with st.spinner(f"{n} Seiten werden gelesen …"):
                 scanne(doc, range(n), ocr_erzwingen)
             st.rerun()
+        if st.button(f"🔍 Nur Seite {p_id + 1} scannen", width="stretch"):
+            with st.spinner("Seite wird gelesen …"):
+                scanne(doc, [p_id], ocr_erzwingen)
+            st.rerun()
 
-        funde = funde_der_seite(p_id)
-        if p_id in st.session_state.woerter:
+    with st.container(border=True, key="karte_lernen"):
+        titel("🧠", "Lernfortschritt")
+        m1, m2 = st.columns(2)
+        m1.markdown(f"<span class='gz-zahl'>{len(kb['blacklist'])}</span><br>"
+                    "<span class='gz-klein'>immer schwärzen</span>", unsafe_allow_html=True)
+        m2.markdown(f"<span class='gz-zahl'>{len(kb['whitelist'])}</span><br>"
+                    "<span class='gz-klein'>nie schwärzen</span>", unsafe_allow_html=True)
+        with st.expander("Gelernte Begriffe"):
+            if kb["blacklist"]:
+                st.write("**Zuletzt gelernt (immer schwärzen):**")
+                for item in list(kb["blacklist"])[-5:]:
+                    st.caption(f"• {item}")
+            if kb["whitelist"]:
+                st.write("**Zuletzt gelernt (nie schwärzen):**")
+                for item in list(kb["whitelist"])[-5:]:
+                    st.caption(f"• {item}")
+            if st.button("Gedächtnis löschen", width="stretch"):
+                st.session_state.kb = {"whitelist": [], "blacklist": []}
+                save_knowledge(st.session_state.kb)
+                st.rerun()
+
+    with st.container(border=True, key="karte_seiten"):
+        titel("🗂️", "Seitenübersicht", f"· {len(st.session_state.woerter)} von {n} gescannt")
+        with st.container(height=min(260, 140 * ((n + 2) // 3) + 10), border=False):
+            for start in range(0, n, 3):
+                spalten = st.columns(3)
+                for p in range(start, min(start + 3, n)):
+                    with spalten[p - start]:
+                        st.image(seitenbild(doc, datei_id, p, 0.25), width="stretch")
+                        zeichen = "✓ " if p in st.session_state.woerter else ""
+                        st.button(f"{zeichen}{p + 1}", key=f"mini_{p}", on_click=gehe_zu, args=(p + 1,),
+                                  type="primary" if p == p_id else "secondary", width="stretch")
+
+# --- Mittlere Spalte: Werkzeugleiste und Vorschau ---
+with col_m:
+    with st.container(key="leiste"):
+        w = st.columns([0.7, 1.1, 0.9, 0.7, 0.4, 0.7, 0.9, 0.7, 2.2], vertical_alignment="center")
+        w[0].button("◀", on_click=gehe_zu, args=(p_id,), disabled=p_id == 0, help="Vorige Seite", width="stretch")
+        w[1].number_input("Seite", 1, n, key="seite", label_visibility="collapsed")
+        w[2].markdown(f"<div class='gz-mitte'>/ {n}</div>", unsafe_allow_html=True)
+        w[3].button("▶", on_click=gehe_zu, args=(p_id + 2,), disabled=p_id == n - 1, help="Nächste Seite",
+                    width="stretch")
+        w[5].button("−", on_click=zoom_aendern, args=(-0.25,), disabled=st.session_state.zoom <= 0.5,
+                    help="Verkleinern", width="stretch")
+        w[6].markdown(f"<div class='gz-mitte'>{st.session_state.zoom:.0%}</div>", unsafe_allow_html=True)
+        w[7].button("+", on_click=zoom_aendern, args=(0.25,), disabled=st.session_state.zoom >= 2.0,
+                    help="Vergrößern", width="stretch")
+        w[8].toggle("Alle Seiten", key="alle_zeigen", disabled=n == 1,
+                    help="Alle Seiten untereinander zum Durchscrollen. Die Fundstellen rechts gehören "
+                         "zur gewählten Seite; wählen per Pfeilen, Seitenzahl oder Seitenübersicht.")
+
+    zoom = st.session_state.zoom
+    aufloesung = 1.5 if zoom <= 1 else 2.5   # Pixel je PDF-Punkt; Anzeigegröße regelt der Zoom
+    # Zoom: Seiten breiter als die Spalte darstellen, dann seitlich scrollbar
+    st.markdown(f"<style>.st-key-vorschau [data-testid='stImage'] img, .st-key-einzeln [data-testid='stImage'] img"
+                f"{{width:{zoom * 100:.0f}% !important;max-width:none !important;}}"
+                ".st-key-vorschau,.st-key-einzeln{overflow-x:auto !important;}"
+                "div:has(>.st-key-vorschau){--h:max(400px,calc(100vh - 230px));"
+                "height:var(--h)!important;flex:0 0 var(--h)!important}</style>",
+                unsafe_allow_html=True)
+    if st.session_state.alle_zeigen and n > 1:
+        with st.container(height=800, key="vorschau"):
+            for p in range(n):
+                k1, k2 = st.columns([3, 1], vertical_alignment="center")
+                status = "gescannt" if p in st.session_state.woerter else "nicht gescannt"
+                k1.markdown(f"<span id='grauzone-seite-{p}'></span>"
+                            f"**{'▶ ' if p == p_id else ''}Seite {p + 1}** · <span class='gz-klein'>{status}</span>",
+                            unsafe_allow_html=True)
+                k2.button("Fundstellen", key=f"bearbeiten_{p}", on_click=gehe_zu, args=(p + 1,),
+                          disabled=p == p_id, type="tertiary", width="stretch")
+                st.image(vorschau(doc, datei_id, p, aufloesung), width="stretch")
+        # Bei Seitenwechsel (Pfeile, Seitenzahl, Schalter) die Vorschau zur Seite scrollen
+        if st.session_state.get("gezeigt") not in (None, (p_id, True)):
+            zur_seite_scrollen(p_id)
+        st.session_state.gezeigt = (p_id, True)
+    else:
+        with st.container(key="einzeln"):
+            st.image(vorschau(doc, datei_id, p_id, aufloesung), width="stretch")
+        st.session_state.gezeigt = (p_id, False)
+
+    funde = funde_der_seite(p_id)
+    aktiv = sum(ist_gewaehlt(p_id, f) for f in funde)
+    st.markdown(f"<div class='gz-legende'>Seite {p_id + 1}: {len(funde)} Fundstellen · "
+                f"<span class='rot'>●</span> {aktiv} wird geschwärzt · "
+                f"<span class='grau'>●</span> {len(funde) - aktiv} freigegeben</div>",
+                unsafe_allow_html=True)
+
+# --- Rechte Spalte: Fundstellen-Analyse und Export ---
+GRUPPEN = {"Alle": None, "Personen": {"PER"}, "Kontakte": {"TEL", "MAIL", "ADR"},
+           "Weitere": {"ORT", "ORG", "IBAN", "LISTE"}}
+
+with col_r:
+    with st.container(border=True, key="karte_funde"):
+        titel("📊", "Fundstellen-Analyse", f"· Seite {p_id + 1}")
+        if p_id not in st.session_state.woerter:
+            st.info("Diese Seite wurde noch nicht gescannt. Links **Alle Seiten scannen** wählen.")
+        else:
             quelle = st.session_state.woerter[p_id]["quelle"]
-            st.write(f"**Fundstellen Seite {p_id + 1}** · {len(funde)} gefunden · gelesen per {quelle}")
-            with st.container(height=420):
+            anzahl_je = {g: sum(1 for f in funde if arten is None or f.art in arten)
+                         for g, arten in GRUPPEN.items()}
+            gruppe = st.segmented_control(
+                "Filter", list(GRUPPEN), key="filter", label_visibility="collapsed",
+                format_func=lambda g: f"{g} ({anzahl_je[g]})") or "Alle"
+            st.caption(f"gelesen per {quelle} · Haken = wird geschwärzt")
+            with st.container(height=300, border=False):
                 if not funde:
                     st.caption("Keine personenbezogenen Daten erkannt.")
                 for i, fund in enumerate(funde):
+                    if GRUPPEN[gruppe] is not None and fund.art not in GRUPPEN[gruppe]:
+                        continue
                     vorgabe = not in_liste(fund.text, kb["whitelist"])
-                    wert = st.checkbox(
-                        f"{fund.text}  ·  {E.ARTEN.get(fund.art, fund.art)}",
-                        value=ist_gewaehlt(p_id, fund),
-                        key=f"cb_{uploaded_file.name}_{p_id}_{i}_{fund.text}",
-                    )
+                    gewaehlt = ist_gewaehlt(p_id, fund)
+                    with st.container(border=True, key=f"fund_{'an' if gewaehlt else 'aus'}_{p_id}_{i}"):
+                        wert = st.checkbox(
+                            f"**{fund.text}**",
+                            value=gewaehlt,
+                            key=haken_key(p_id, i, fund),
+                        )
+                        st.markdown(f"<span class='gz-art'>{i + 1} · {E.ARTEN.get(fund.art, fund.art)} · "
+                                    f"Seite {p_id + 1}</span>", unsafe_allow_html=True)
                     st.session_state.auswahl[(p_id, fund.text.lower())] = wert
                     # Lernen: abgewählt -> nie schwärzen; wieder gewählt -> Eintrag entfernen
                     if not wert and vorgabe and not in_liste(fund.text, kb["whitelist"]):
@@ -293,9 +487,9 @@ if uploaded_file:
                         kb["whitelist"] = [x for x in kb["whitelist"] if x.lower() != fund.text.lower()]
                         save_knowledge(kb)
 
-            with st.form("zusatz", clear_on_submit=True):
+            with st.form("zusatz", clear_on_submit=True, border=False):
                 zusatz = st.text_input(
-                    "Fehlt etwas? Begriff eingeben (mehrere mit Komma trennen)",
+                    "Fehlt etwas?", placeholder="Begriff eingeben, mehrere mit Komma",
                     help="Der Begriff wird auf allen gescannten Seiten geschwärzt und für künftige Dokumente gemerkt.")
                 if st.form_submit_button("➕ Hinzufügen", width="stretch") and zusatz.strip():
                     for begriff in [b.strip() for b in zusatz.split(",") if b.strip()]:
@@ -305,15 +499,17 @@ if uploaded_file:
                     save_knowledge(kb)
                     st.session_state.export = None
                     st.rerun()
-        else:
-            st.caption("Diese Seite wurde noch nicht gescannt.")
 
-        gescannt = sorted(st.session_state.woerter)
-        if gescannt:
-            offen = [str(p + 1) for p in range(n) if p not in st.session_state.woerter]
+    gescannt = sorted(st.session_state.woerter)
+    offen = [str(p + 1) for p in range(n) if p not in st.session_state.woerter]
+    with st.container(border=True, key="karte_export"):
+        titel("📤", "Export")
+        if not gescannt:
+            st.caption("Erst nach dem Scannen möglich.")
+        else:
             if offen:
                 st.warning(f"Nicht gescannt und daher **nicht geschwärzt**: Seite {', '.join(offen)}")
-            if st.button("🔒 SCHWÄRZEN & EXPORT", type="primary", width="stretch"):
+            if st.button("🔒 Schwärzen & exportieren", type="primary", width="stretch"):
                 pdf_daten, anzahl = E.schwaerze(file_content, {
                     p: [r for fund in funde_der_seite(p) if ist_gewaehlt(p, fund) for r in rechtecke(p, fund)]
                     for p in gescannt})
@@ -329,43 +525,20 @@ if uploaded_file:
                 st.success(f"{anzahl} Stellen auf {seiten} Seite(n) geschwärzt.")
                 name = os.path.splitext(uploaded_file.name)[0]
                 d1, d2 = st.columns(2)
-                d1.download_button("📥 PDF", daten, f"Anonymisiert_{name}.pdf",
+                d1.download_button("📥 Geschwärztes PDF", daten, f"Anonymisiert_{name}.pdf",
                                    mime="application/pdf", width="stretch")
                 d2.download_button("📝 Markdown", md.encode("utf-8"), f"Anonymisiert_{name}.md",
                                    mime="text/markdown", width="stretch",
                                    help="Text der gescannten Seiten; geschwärzte Stellen als Platzhalter "
                                         "wie [Person 1]. Tabellen und Layout bleiben nicht erhalten.")
 
-    with col_view:
-        # Blättern: Pfeile und Anzeige der gewählten Seite
-        n1, n2, n3 = st.columns([1, 4, 1])
-        n1.button("◀", on_click=gehe_zu, args=(p_id,), disabled=p_id == 0,
-                  width="stretch", help="Vorige Seite")
-        n2.markdown(f"<div style='text-align:center;padding-top:.4rem'><b>Seite {p_id + 1} von {n}</b></div>",
-                    unsafe_allow_html=True)
-        n3.button("▶", on_click=gehe_zu, args=(p_id + 2,), disabled=p_id == n - 1,
-                  width="stretch", help="Nächste Seite")
-
-        st.caption("Rot = wird geschwärzt, grau = abgewählt.")
-        if alle_zeigen and n > 1:
-            # Höhe an das Browserfenster anpassen, damit Pfeile und Seite gleichzeitig sichtbar bleiben
-            st.markdown("<style>div:has(>.st-key-vorschau){--h:max(400px,calc(100vh - 340px));"
-                        "height:var(--h)!important;flex:0 0 var(--h)!important}</style>",
-                        unsafe_allow_html=True)
-            with st.container(height=800, key="vorschau"):
-                for p in range(n):
-                    k1, k2 = st.columns([3, 1])
-                    status = "gescannt" if p in st.session_state.woerter else "nicht gescannt"
-                    k1.markdown(f"<span id='grauzone-seite-{p}'></span>"
-                                f"**{'▶ ' if p == p_id else ''}Seite {p + 1}** · {status}",
-                                unsafe_allow_html=True)
-                    k2.button("Bearbeiten", key=f"bearbeiten_{p}", on_click=gehe_zu, args=(p + 1,),
-                              disabled=p == p_id, width="stretch")
-                    st.image(vorschau(doc, datei_id, p, zoom_preview), width="stretch")
-            # Bei Seitenwechsel (Pfeile, Seitenzahl, Schalter) die Vorschau zur Seite scrollen
-            if st.session_state.get("gezeigt") not in (None, (p_id, True)):
-                zur_seite_scrollen(p_id)
-            st.session_state.gezeigt = (p_id, True)
-        else:
-            st.image(vorschau(doc, datei_id, p_id, zoom_preview), width="stretch")
-            st.session_state.gezeigt = (p_id, False)
+# --- Statuszeile ---
+if not gescannt:
+    status = "Dokument geladen. Noch nicht gescannt."
+else:
+    gesamt = sum(len(funde_der_seite(p)) for p in gescannt)
+    status = (f"<span class='ok'>✔</span> Analyse: {len(gescannt)} von {n} Seite(n) gescannt, "
+              f"{gesamt} Fundstellen gefunden.")
+    if offen:
+        status += f" <span class='warn'>Nicht gescannt: Seite {', '.join(offen)}.</span>"
+st.markdown(f"<div class='gz-status'>{status}</div>", unsafe_allow_html=True)

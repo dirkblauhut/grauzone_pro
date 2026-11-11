@@ -16,6 +16,7 @@ Vom Nutzer festgelegt am 2026-11-11: `main` mit Release `v0.4.5` ist die funktio
 - Zwei Geräte: GitHub ist die gemeinsame Ablage. Vor der Arbeit `git switch redesign` und `git pull`, danach committen und `git push`. Am Sitzungsende `/projekt-uebergabe` ausführen und diese Datei mitpushen; Claude-Memory gilt nur je Gerät. Nicht auf beiden Geräten gleichzeitig dieselbe Datei ändern.
 - Pro Gerät, nicht im Repository: `venv/` (per `Grauzone installieren.command`), `knowledge_base.json`, `vornamen.txt`.
 - Korrekturen an `main` (0.4.x) per `git merge main` nach `redesign` übernehmen.
+- Umgesetzt (2026-11-11, nach Bild 1 des ChatGPT-Entwurfs, vom Nutzer gewählt): Kopfzeile in Dunkelblau mit Badge „Testversion“ und ⚙-Popover (Update-Schalter), drei Spalten ohne Seitenleiste: links Hochladen, Analyse (OCR, Scannen), Lernfortschritt, Seitenübersicht mit Vorschaubildern; Mitte Werkzeugleiste (◀ Seite ▶, Zoom −/+, „Alle Seiten“) und Vorschau; rechts Fundstellen als Karten mit Filter (Alle/Personen/Kontakte/Weitere), „Fehlt etwas?“, Export; Statuszeile unten. Stil per CSS in `app.py` (`STIL`) und `[theme]` in `.streamlit/config.toml`; `macos/VERSION` = `0.5.0-test`. Bewusst weggelassen, weil die Funktion fehlt: Konfidenz-Prozente, Smart-Learning, Profile, Prüfprotokoll.
 - Ideen des Nutzers (ChatGPT-Entwurf vom 2026-11-11, nicht abgestimmt): Drei-Spalten-Layout, Bearbeiten direkt im Dokument, Regeln mit Geltungsbereich (Dokument, Profil, global) und Rückfrage vor globaler Übernahme, Profile, Undo, Exportprüfung und Prüfprotokoll ohne Originaldaten, heller Stil mit Dunkelblau, Dark Mode optional. Vor der Umsetzung mit dem Nutzer klären, weil sie Festlegungen berühren: PDF.js als eigene Komponente (braucht Node/npm), Presidio und lokales Sprachmodell (Versionskette L2, 8 GB RAM), Tesseract statt EasyOCR (Systemprogramm), SQLite statt `knowledge_base.json`.
 
 ## 1. Kernarchitektur und Tech-Stack
@@ -25,9 +26,9 @@ Zweck: Personenbezogene Daten in PDF-Dokumenten vollständig lokal erkennen und 
 Stack: Python 3.11 (Mac-App/Installer über uv), Streamlit, PyMuPDF (`import pymupdf`), EasyOCR, spaCy `>=3.5.0,<3.6.0` mit `de_core_news_lg` (Ersatz `de_core_news_sm`, je 3.5.0), `numpy<2`, Pillow, Faker. Streamlit `>=1.50,<1.68` (getestet: 1.67.0; `width=` geprüft ab 1.50). PyMuPDF `>=2.1,<2.2` ab Python 3.11, sonst `>=1.26.5,<1.27` (beide getestet). EasyOCR ist nicht begrenzt (installiert: 1.7.2).
 
 Struktur:
-- `app.py`: Streamlit-Oberfläche: Hochladen, Scannen (`scanne`, Seite oder alle Seiten), Fundstellenliste, Lernen über `knowledge_base.json`, Export mit `apply_redactions()` und `set_metadata({})`.
+- `app.py`: Streamlit-Oberfläche: Hochladen, Scannen (`scanne`, Seite oder alle Seiten), Fundstellenliste, Lernen über `knowledge_base.json`, Export über `E.schwaerze` (auf `redesign` drei Spalten, siehe Abschnitt „Testversion“).
 - `erkennung.py`: Erkennung ohne Streamlit: `woerter_aus_textebene`, `woerter_aus_ocr`, `seitentext`, `finde`, `wort_rechteck`, `markdown` (Export), `oeffne_pdf`, `schwaerze` (physisches Schwärzen, Metadaten löschen; seit Branch `redesign` aus `app.py` hierher verschoben); Datenklassen `Wort`, `Fund`.
-- `tests/`: Regressionstests mit `unittest` (keine Zusatzbibliothek): `test_erkennung.py` (Muster, Grenzen, Rechtecke, Markdown), `test_schwaerzung.py` (mehrseitiges PDF, Formularfeld, Metadaten, Scan per OCR nur mit `GRAUZONE_OCR_TEST=1`), `test_app.py` (App startet per `AppTest`); `hilfen.py` bildet `scanne` und Export ohne Streamlit nach.
+- `tests/`: Regressionstests mit `unittest` (keine Zusatzbibliothek): `test_erkennung.py` (Muster, Grenzen, Rechtecke, Markdown), `test_schwaerzung.py` (mehrseitiges PDF, Formularfeld, Metadaten, Scan per OCR nur mit `GRAUZONE_OCR_TEST=1`), `test_app.py` (per `AppTest` in leerem Arbeitsordner: Start, Scannen, Blättern, Export, Haken entfernen); `hilfen.py` bildet `scanne` und Export ohne Streamlit nach.
 - `.streamlit/config.toml`: `address = "localhost"`, `headless = true`, `gatherUsageStats = false`.
 - `macos/`: `Grauzone-launcher.sh` (App-Starter), `grauzone-start.sh` (Einrichtung und Start im Datenordner), `grauzone-update.sh` (Selbst-Update), `build_dmg.sh`, `make_icon.py`, `VERSION`.
 - `Grauzone installieren.command`, `START_GRAUZONE.command`, `starten.command`, `setup_project.py`: Einrichtung und Start aus dem Quellcode.
@@ -101,6 +102,8 @@ Starten und Testen:
 | Absender und Anschrift als eine Fundstelle | spaCy-Entitäten über Zeilenumbrüche | Aufteilen an `\n` (`erkennung.py:162`) | Entitäten ungeteilt übernehmen |
 | Buchstabenreste neben Balken bei Scans | OCR-Wortgrenzen ungenau | Zusätzlicher Rand für OCR-Wörter, `width_ths=0.05` (`erkennung.py:71`, `:238`) | Rand für OCR-Wörter auf Textebenen-Niveau senken |
 | Auswahl auf anderer Seite verloren | Streamlit löscht Zustand verborgener Widgets | `st.session_state.auswahl` (`app.py:239`) | Auswahl nur über Checkbox-Keys halten |
+| Haken entfernt, aber Vorschau, Zähler und Karte blieben rot (Testversion) | Rechte Spalte (Liste) läuft nach der Vorschau; Auswahl kam zu spät in `st.session_state.auswahl` | Haken vor dem Zeichnen aus den Checkbox-Keys übernehmen (`haken_key`, `app.py`), Export verwerfen; Test `test_haken_entfernen_wirkt_sofort` | Auswahl erst beim Zeichnen der Liste übernehmen, wenn die Liste nach der Vorschau steht |
+| Tests schrieben in die echte `knowledge_base.json` | Abwählen lernt „nie schwärzen“, App liest relativ zum Arbeitsordner | `tests/test_app.py` startet in `tempfile.mkdtemp()` | App-Tests im Projektordner laufen lassen |
 | ◀ ▶ und Seitenzahl wechselten nur die Fundstellen-Liste, die Vorschau blieb stehen; Scrollbereich höher als das Fenster | Streamlit scrollt nicht selbst; `st.container(height=900)` fest | `zur_seite_scrollen` und CSS-Höhe in `app.py` (0.4.5) | Feste Container-Höhe über Fensterhöhe; CSS nur auf den Container statt auf seinen Wrapper (`flex: 0 0 800px` gewinnt) |
 | Quarantäne-Attribut auf kopierten Dateien der Mac-App | Kopieren aus dem App-Bundle | Kopieren per `cat` in `macos/Grauzone-launcher.sh` | `cp` für diese Kopie verwenden |
 | Name in PDF-Formularfeld nach Export lesbar über grauem Balken, Wert weiter in der Datei | `apply_redactions()` entfernt keine Formularfelder und Anmerkungen | `oeffne_pdf()` mit `widget.update()` und `doc.bake()` (`app.py`, 0.3.1; jetzt `erkennung.py`, Test `test_formularwert_wird_entfernt`) | PDF in `app.py` direkt mit `pymupdf.open` öffnen |
@@ -117,7 +120,8 @@ Verworfene Ansätze:
 
 ## 4. Offene Aufgaben
 
-- [ ] Testversion auf `redesign` (siehe Abschnitt „Testversion“): Tests vorhanden; als Nächstes Layout, dann weitere Funktionen schrittweise (Priorität hoch)
+- [ ] Testversion auf `redesign` (siehe Abschnitt „Testversion“): Tests und Drei-Spalten-Layout vorhanden; als Nächstes Rückmeldung des Nutzers zum Layout, dann weitere Funktionen schrittweise (Priorität hoch)
+- [ ] `st.components.v1.html` (Scroll-Sprung in `zur_seite_scrollen`, auch in 0.4.5) ist ab Streamlit 1.68 abgekündigt, Ersatz `st.iframe`; vor Anheben der Grenze `<1.68` umstellen und Sprung im Browser prüfen (mittel)
 - [ ] Datumsprüfung `_ist_datum` in `finde` ist beim jetzigen TEL-Muster wirkungslos (kein Datum passt auf das Muster); bei Änderungen am TEL-Muster Test `test_datum_ist_keine_telefonnummer` beachten (niedrig)
 - [ ] Selbst-Update auf 0.4.5 beim Nutzer echt prüfen (Nutzer lief am 2026-11-11 noch mit 0.4.3) (hoch)
 - [ ] EasyOCR ist nicht nach oben begrenzt (installiert 1.7.2) (niedrig)
@@ -134,7 +138,7 @@ Verworfene Ansätze:
 
 ### Nächster konkreter Schritt
 
-Mit dem Nutzer das Layout der Testversion abstimmen (ChatGPT-Entwurf als Ausgangspunkt, offene Punkte im Abschnitt „Testversion“), dann als ersten sichtbaren Schritt das Drei-Spalten-Layout in `app.py` umsetzen: links Datei, Seitenübersicht und Einstellungen, Mitte Vorschau, rechts Fundstellen und Export. Fachlogik bleibt in `erkennung.py`. Prüfen: `./venv/bin/python -m unittest discover -s tests` ohne Fehler, danach `START_TEST.command` und mit erfundenem mehrseitigem PDF scannen, abwählen, exportieren.
+Rückmeldung des Nutzers zum neuen Layout einholen (`START_TEST.command`, Port 8502) und einarbeiten. Danach die nächste Funktion aus dem Entwurf mit dem Nutzer wählen (Vorschlag: Fundstellen direkt in der Vorschau anklicken, oder Rückgängig). Prüfen: `./venv/bin/python -m unittest discover -s tests` ohne Fehler; im Browser mit erfundenem mehrseitigem PDF scannen, Haken entfernen (Karte und Vorschau grau), exportieren.
 
 ## Ungeprüft
 

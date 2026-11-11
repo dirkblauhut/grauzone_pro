@@ -10,8 +10,23 @@ from PIL import Image, ImageDraw
 
 import erkennung as E
 
+def lies_version():
+    """Version aus VERSION (Mac-App: neben app.py) oder macos/VERSION (Quellcode)."""
+    basis = os.path.dirname(os.path.abspath(__file__))
+    for pfad in ("VERSION", os.path.join("macos", "VERSION")):
+        try:
+            with open(os.path.join(basis, pfad), encoding="utf-8") as f:
+                return f.read().strip()
+        except OSError:
+            continue
+    return ""
+
+
+VERSION = lies_version()
+TITEL = f"Grauzone PRO {VERSION}".strip()
+
 # --- 1. KONFIGURATION & MODELLE ---
-st.set_page_config(page_title="Grauzone PRO", layout="wide")
+st.set_page_config(page_title=TITEL, layout="wide")
 
 
 @st.cache_resource
@@ -74,7 +89,7 @@ kb = st.session_state.kb
 
 
 # --- 4. SIDEBAR ---
-st.sidebar.title("🛡️ Grauzone PRO")
+st.sidebar.title(f"🛡️ {TITEL}")
 
 with st.sidebar.expander("🧠 Lernfortschritt & Gedächtnis", expanded=False):
     col_bl, col_wl = st.columns(2)

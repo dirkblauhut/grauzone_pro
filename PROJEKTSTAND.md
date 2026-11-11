@@ -1,6 +1,6 @@
 # Projektstand: Grauzone PRO
 
-Stand: 2026-11-11, Branch main, Commit 162aebb, darauf folgt der Commit zu 0.3.1 (`macos/VERSION` = 0.3.1; letztes Release-Tag `v0.3.0`)
+Stand: 2026-11-11, Branch main, Commit ae048e4 (Tag `v0.3.1`), darauf folgt der Commit zu 0.3.2 (`macos/VERSION` = 0.3.2; zuletzt veröffentlichtes Release `v0.3.0`)
 
 Ergänzt [UEBERGABE.md](UEBERGABE.md). Dort stehen Dateiübersicht, Funktionsweise der Mac-App, Release-Ablauf (Abschnitt 4) und Testanleitung (Abschnitt 5). Diese Datei hält Festlegungen, Learnings und Sackgassen fest und wird nicht mit UEBERGABE.md zusammengeführt.
 
@@ -88,6 +88,7 @@ Starten und Testen:
 | Auswahl auf anderer Seite verloren | Streamlit löscht Zustand verborgener Widgets | `st.session_state.auswahl` (`app.py:189`) | Auswahl nur über Checkbox-Keys halten |
 | Quarantäne-Attribut auf kopierten Dateien der Mac-App | Kopieren aus dem App-Bundle | Kopieren per `cat` in `macos/Grauzone-launcher.sh` | `cp` für diese Kopie verwenden |
 | Name in PDF-Formularfeld nach Export lesbar über grauem Balken, Wert weiter in der Datei | `apply_redactions()` entfernt keine Formularfelder und Anmerkungen | `oeffne_pdf()` mit `widget.update()` und `doc.bake()` (`app.py:142`, 0.3.1) | PDF in `app.py` direkt mit `fitz.open` öffnen |
+| Nach Update der Mac-App lief weiter der alte Code, Export erneut ungeschwärzt | Starter holte nur den Browser nach vorn, wenn schon ein Server lief | Versionsvergleich und Beenden des alten Servers in `macos/Grauzone-launcher.sh`, Version in der Seitenleiste (`app.py` `lies_version`, 0.3.2) | Bei laufendem Server ohne Versionsvergleich nur den Browser öffnen |
 | `de-core-news-sm` in `requirements.txt` nicht installierbar | Modell ist kein PyPI-Paket | Aus `requirements.txt` entfernt (c47888b) | Modelle in `requirements.txt` eintragen |
 
 Verworfene Ansätze:
@@ -99,7 +100,8 @@ Verworfene Ansätze:
 
 ## 4. Offene Aufgaben
 
-- [ ] Release 0.3.1 veröffentlichen: DMG anhängen, Tag `v0.3.1` (Priorität hoch)
+- [ ] Release 0.3.2 veröffentlichen: DMG anhängen, Tag `v0.3.2`; 0.3.1 nicht veröffentlichen (Priorität hoch)
+- [ ] Jede neu heruntergeladene DMG muss in macOS erneut freigegeben werden; Abhilfe nur durch Notarisierung oder Aktualisierung ohne neue DMG (mittel)
 - [ ] Mehrseitige echte Dokumente testen, Text- und Scan-Seiten gemischt, auch Formulare (Priorität hoch, nächster Schritt)
 - [ ] Gesundheitsangaben (Art. 9 DSGVO, z. B. „Medikation: 30 mg“), Alter und Datum werden nicht erkannt; Bedarf klären (mittel)
 - [ ] Breitere Balken bei Scans: Wortgrenzen genauer schätzen, ohne Buchstabenreste (mittel)

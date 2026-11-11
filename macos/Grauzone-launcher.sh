@@ -11,10 +11,23 @@ RES="$(cd "$(dirname "$0")/../Resources" && pwd)"
 DATA="$HOME/Library/Application Support/Grauzone PRO"
 mkdir -p "$DATA/.streamlit"
 
-# Läuft Grauzone schon? Dann nur den Browser nach vorn holen.
+# Läuft Grauzone schon? Gleiche Version: nur den Browser nach vorn holen.
+# Ältere Version (nach einem Update): alten Server beenden, sonst liefe
+# weiter der alte Programmcode.
 if curl -fs -m 2 -o /dev/null http://localhost:8501/_stcore/health; then
-    open "http://localhost:8501"
-    exit 0
+    if cmp -s "$RES/grauzone/VERSION" "$DATA/VERSION"; then
+        open "http://localhost:8501"
+        exit 0
+    fi
+    pkill -f "$DATA/venv/bin/python -m streamlit"
+    for _ in $(seq 1 20); do
+        curl -fs -m 1 -o /dev/null http://localhost:8501/_stcore/health || break
+        sleep 0.5
+    done
+    if curl -fs -m 1 -o /dev/null http://localhost:8501/_stcore/health; then
+        osascript -e 'display alert "Grauzone PRO" message "Eine ältere Grauzone läuft noch. Bitte deren Terminalfenster schließen und Grauzone PRO erneut öffnen."'
+        exit 1
+    fi
 fi
 
 # Programmdateien aktualisieren. Bewusst per "cat" statt "cp", damit das

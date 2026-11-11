@@ -1,94 +1,121 @@
 # 🛡️ Grauzone PRO: Lokale PDF-Anonymisierung
 
-Grauzone PRO ist eine leistungsstarke, datenschutzkonforme Desktop-Anwendung zur automatischen Erkennung und Schwärzung von personenbezogenen Daten (PII) in PDF-Dokumenten. 
+Grauzone PRO erkennt und schwärzt personenbezogene Daten (Namen, Orte, Organisationen, Telefonnummern) in PDF-Dokumenten.
 
-**Der entscheidende Vorteil:** Alle Prozesse laufen zu 100 % lokal auf deinem Rechner ab. Es werden keine Daten in eine Cloud hochgeladen – ideal für sensible Dokumente, Anwaltskanzleien oder Behörden.
-
----
-
-## ✨ Hauptfunktionen
-
-- **KI-gestützte Erkennung:** Nutzt moderne NLP-Modelle (spaCy) zur Identifikation von Namen, Orten und Organisationen.
-- **Integrierte OCR:** Dank EasyOCR wird Text auch in gescannten PDFs oder Bildern zuverlässig erkannt.
-- **Kontext-Intelligenz:** Automatische Erkennung von Telefonnummern und Namen durch Kontext-Keywords (z.B. "Herr", "Frau", "Tel:").
-- **Lernfähiges System:** Eine integrierte Knowledge Base merkt sich deine manuellen Korrekturen (Whitelist/Blacklist).
-- **Interaktive Vorschau:** Markiere Begriffe direkt in der Benutzeroberfläche und exportiere das fertige, geschwärzte PDF mit einem Klick.
-- **Wissens-Monitor:** Verfolge in der Seitenleiste live den Lernfortschritt der KI.
+**Alles läuft lokal auf dem eigenen Rechner.** Dokumente werden nicht in eine Cloud hochgeladen. Internet braucht es nur einmal bei der Einrichtung, um Programmbibliotheken und KI-Modelle herunterzuladen.
 
 ---
 
-## 🛠️ Installation (Entwickler-Modus)
+## ✨ Funktionen
 
-Um die Anwendung aus dem Quellcode zu starten, folge diesen Schritten:
+- **Erkennung per Sprachmodell:** spaCy (deutsches Modell `de_core_news_lg`, ersatzweise `de_core_news_sm`) findet Namen, Orte und Organisationen.
+- **Texterkennung (OCR):** EasyOCR liest auch gescannte PDFs.
+- **Kontext-Regeln:** Telefonnummern und Namen werden zusätzlich über Muster und Schlüsselwörter erkannt (z. B. „Herr“, „Frau“, „Tel:“).
+- **Lernende Wissensbasis:** Manuelle Korrekturen werden in `knowledge_base.json` gespeichert (Whitelist/Blacklist).
+- **Vorschau und Export:** Treffer in der Oberfläche prüfen und das geschwärzte PDF mit einem Klick speichern.
 
-### 1. Repository klonen
+---
+
+## 🚀 Installation auf dem Mac (empfohlen, ohne Terminal)
+
+1. Auf dieser Seite oben **„Code“ → „Download ZIP“** wählen, die ZIP-Datei entpacken und den Ordner an einen festen Platz legen, z. B. `Dokumente/grauzone_pro`.
+2. Im Ordner **`Grauzone installieren.command`** doppelklicken.
+   - Meldet macOS, die Datei stamme von einem nicht verifizierten Entwickler: **Rechtsklick → „Öffnen“ → „Öffnen“**. (Ab macOS 15: Systemeinstellungen → Datenschutz & Sicherheit → „Dennoch öffnen“.)
+3. Es öffnet sich ein Terminalfenster. Die Einrichtung läuft von selbst durch (beim ersten Mal 5–15 Minuten, ca. 2 GB Download):
+   - holt das Hilfsprogramm [uv](https://docs.astral.sh/uv/), das bei Bedarf auch **Python 3.11** herunterlädt (eine vorhandene Python-Installation wird nicht verändert),
+   - legt im Ordner eine eigene Umgebung `venv` an und installiert dort die Bibliotheken,
+   - lädt die deutschen spaCy-Modelle und die EasyOCR-Modelle,
+   - startet Grauzone im Browser unter <http://localhost:8501>.
+4. **Künftig:** Doppelklick auf **`START_GRAUZONE.command`**. Beenden: Terminalfenster schließen.
+
+Das Installationsprogramm kann jederzeit erneut ausgeführt werden, etwa nach einem Update. Vorhandenes wird nur ergänzt.
+
+---
+
+## 🛠️ Manuelle Installation (Mac, Linux, Windows)
+
+**Voraussetzung: Python 3.9 bis 3.11.** spaCy 3.5 läuft nicht mit Python 3.12 oder neuer.
+
 ```bash
-git clone [https://github.com/DEIN_USERNAME/grauzone.git](https://github.com/DEIN_USERNAME/grauzone.git)
-cd grauzone
+git clone https://github.com/dirkblauhut/grauzone_pro.git
+cd grauzone_pro
+```
 
-### 2. Virtuelle Umgebung erstellen & aktivieren
-Auf dem Mac:
+Umgebung anlegen und aktivieren – Mac/Linux:
 
-Bash
-python -m venv venv
+```bash
+python3.11 -m venv venv
 source venv/bin/activate
-Auf Windows:
+```
 
-Bash
-python -m venv venv
+Windows:
+
+```bat
+py -3.11 -m venv venv
 venv\Scripts\activate
+```
 
-### 3. Setup ausführen
-Dieses Skript installiert alle benötigten Bibliotheken und lädt die notwendigen KI-Sprachmodelle (spaCy de_core_news_lg) herunter:
+Bibliotheken und Modelle installieren, dann starten:
 
-Bash
+```bash
 python setup_project.py
+python -m streamlit run app.py
+```
 
-### 4. App starten
-Bash
-streamlit run app.py
+`setup_project.py` installiert die Bibliotheken aus `requirements.txt` und beide deutschen Sprachmodelle. Grauzone verwendet automatisch das große Modell `de_core_news_lg`, das Namen zuverlässiger erkennt, und sonst `de_core_news_sm`.
 
-### 📦 Paketierung als Desktop-App (.app / .exe)
-Du kannst das Tool als eigenständige Datei für Kollegen bereitstellen, die kein Python installiert haben. Wir nutzen dafür PyInstaller.
+> **Hinweis:** `python -m spacy download …` funktioniert mit spaCy 3.5 nicht mehr (es entsteht ein ungültiger Link mit Fehler 404). Die Modelle deshalb direkt installieren:
+> `pip install https://github.com/explosion/spacy-models/releases/download/de_core_news_lg-3.5.0/de_core_news_lg-3.5.0-py3-none-any.whl`
 
-Führe diesen Befehl im aktivierten venv aus:
+---
 
-Bash
+## 📦 Paketierung als Desktop-App (.app / .exe)
+
+Für Rechner ohne Python lässt sich mit PyInstaller eine eigenständige App bauen (im aktivierten `venv`):
+
+```bash
+pip install pyinstaller
 python -m PyInstaller --noconfirm --onefile --windowed \
---additional-hooks-dir=./hooks \
---collect-all easyocr \
---collect-all spacy \
---collect-all de_core_news_lg \
---add-data "app.py:." \
---add-data "vornamen.txt:." \
---add-data "knowledge_base.json:." \
-run_app.py
-Die fertige App findest du anschließend im Ordner dist/.
+  --additional-hooks-dir=./hooks \
+  --collect-all easyocr \
+  --collect-all spacy \
+  --collect-all de_core_news_lg \
+  --add-data "app.py:." \
+  --add-data "vornamen.txt:." \
+  --add-data "knowledge_base.json:." \
+  run_app.py
+```
 
-### 📂 Projektstruktur
-app.py: Die Hauptanwendung (Streamlit Interface).
+Die fertige App liegt danach im Ordner `dist/`. `vornamen.txt` und `knowledge_base.json` müssen dafür vorhanden sein.
 
-run_app.py: Der Wrapper-Starter für die Desktop-App.
+---
 
-setup_project.py: Automatisiertes Installations-Skript.
+## 📂 Projektstruktur
 
-knowledge_base.json: Speichert gelernte Begriffe (lokale Datenbank).
+| Datei | Zweck |
+|---|---|
+| `Grauzone installieren.command` | Einrichtung und Start per Doppelklick (macOS) |
+| `START_GRAUZONE.command` | Start per Doppelklick nach der Einrichtung (`starten.command` ist gleichwertig) |
+| `app.py` | Hauptanwendung (Streamlit-Oberfläche) |
+| `requirements.txt` | Benötigte Bibliotheken |
+| `setup_project.py` | Einfaches Installationsskript (Bibliotheken + kleines Sprachmodell) |
+| `run_app.py` | Starter für die PyInstaller-App |
+| `hooks/` | Konfiguration für den PyInstaller-Build |
+| `.streamlit/config.toml` | Schaltet die Nutzungsstatistik von Streamlit ab |
+| `vornamen.txt` | Vornamenliste für die Namenserkennung (lokal, nicht im Repository) |
+| `knowledge_base.json` | Gelernte Begriffe (lokal, nicht im Repository) |
 
-vornamen.txt: Abgleich-Datenbank für die Namenserkennung.
+---
 
-hooks/: Notwendige Konfigurationen für den PyInstaller-Build.
+## 🔒 Datenschutz
 
-### 🔒 Datenschutzhinweis
-Diese Software wurde mit dem "Privacy by Design"-Prinzip entwickelt.
+- **Keine Cloud-Dienste:** Es werden keine externen KI-Dienste (z. B. OpenAI, Google Vision) angebunden.
+- **Lokale Verarbeitung:** Texterkennung und Analyse laufen ausschließlich auf dem eigenen Rechner.
+- **Keine Telemetrie:** Die Nutzungsstatistik von Streamlit ist über `.streamlit/config.toml` abgeschaltet.
+- **Internet nur bei der Einrichtung:** für Bibliotheken, spaCy- und EasyOCR-Modelle. Danach arbeitet Grauzone offline.
 
-Keine API-Anbindung: Es werden keine externen Dienste wie OpenAI oder Google Vision verwendet.
+---
 
-Lokale Verarbeitung: Die Texterkennung (OCR) und Analyse findet ausschließlich auf der CPU/GPU des lokalen Rechners statt.
+## ⚖️ Lizenz
 
-Keine Telemetrie: Es werden keine Nutzungsstatistiken erhoben.
-
-⚖️ Lizenz
-Dieses Projekt ist unter der MIT-Lizenz lizenziert. Siehe LICENSE für Details.
-
-
-***
+MIT-Lizenz.

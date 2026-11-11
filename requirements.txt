@@ -2,8 +2,7 @@ streamlit
 pymupdf
 pillow
 easyocr
-numpy
 faker
+# spaCy 3.5 ist nur mit numpy 1.x gebaut und läuft nur mit Python bis 3.11
 spacy>=3.5.0,<3.6.0
-numpy
-faker
+numpy<2

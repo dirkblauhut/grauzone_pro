@@ -1,0 +1,6 @@
+# Keine Nutzungsstatistik an Streamlit senden (Grauzone läuft rein lokal)
+[browser]
+gatherUsageStats = false
+
+[server]
+headless = false

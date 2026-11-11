@@ -26,7 +26,8 @@ Stack: Python 3.11 (Mac-App/Installer über uv), Streamlit, PyMuPDF (`import pym
 
 Struktur:
 - `app.py`: Streamlit-Oberfläche: Hochladen, Scannen (`scanne`, Seite oder alle Seiten), Fundstellenliste, Lernen über `knowledge_base.json`, Export mit `apply_redactions()` und `set_metadata({})`.
-- `erkennung.py`: Erkennung ohne Streamlit: `woerter_aus_textebene`, `woerter_aus_ocr`, `seitentext`, `finde`, `wort_rechteck`, `markdown` (Export); Datenklassen `Wort`, `Fund`.
+- `erkennung.py`: Erkennung ohne Streamlit: `woerter_aus_textebene`, `woerter_aus_ocr`, `seitentext`, `finde`, `wort_rechteck`, `markdown` (Export), `oeffne_pdf`, `schwaerze` (physisches Schwärzen, Metadaten löschen; seit Branch `redesign` aus `app.py` hierher verschoben); Datenklassen `Wort`, `Fund`.
+- `tests/`: Regressionstests mit `unittest` (keine Zusatzbibliothek): `test_erkennung.py` (Muster, Grenzen, Rechtecke, Markdown), `test_schwaerzung.py` (mehrseitiges PDF, Formularfeld, Metadaten, Scan per OCR nur mit `GRAUZONE_OCR_TEST=1`), `test_app.py` (App startet per `AppTest`); `hilfen.py` bildet `scanne` und Export ohne Streamlit nach.
 - `.streamlit/config.toml`: `address = "localhost"`, `headless = true`, `gatherUsageStats = false`.
 - `macos/`: `Grauzone-launcher.sh` (App-Starter), `grauzone-start.sh` (Einrichtung und Start im Datenordner), `grauzone-update.sh` (Selbst-Update), `build_dmg.sh`, `make_icon.py`, `VERSION`.
 - `Grauzone installieren.command`, `START_GRAUZONE.command`, `starten.command`, `setup_project.py`: Einrichtung und Start aus dem Quellcode.
@@ -69,7 +70,7 @@ Starten und Testen:
 - Einrichtung: `Grauzone installieren.command` doppelklicken, oder `python setup_project.py` in einer Python-3.11-Umgebung.
 - Start: `./venv/bin/python -m streamlit run app.py` (entspricht `START_GRAUZONE.command`).
 - DMG bauen: `sh macos/build_dmg.sh` (Ergebnis in `dist/`).
-- Automatisierte Tests gibt es nicht; Testvorgehen siehe UEBERGABE.md, Abschnitt 5.
+- Tests (Branch `redesign`): `./venv/bin/python -m unittest discover -s tests`, mit Scan-Test zusätzlich `GRAUZONE_OCR_TEST=1` (etwa 30 s). Vor jedem Commit ausführen. Weiteres Testvorgehen siehe UEBERGABE.md, Abschnitt 5.
 
 ## 2. Die drei wichtigsten Learnings
 
@@ -102,7 +103,7 @@ Starten und Testen:
 | Auswahl auf anderer Seite verloren | Streamlit löscht Zustand verborgener Widgets | `st.session_state.auswahl` (`app.py:239`) | Auswahl nur über Checkbox-Keys halten |
 | ◀ ▶ und Seitenzahl wechselten nur die Fundstellen-Liste, die Vorschau blieb stehen; Scrollbereich höher als das Fenster | Streamlit scrollt nicht selbst; `st.container(height=900)` fest | `zur_seite_scrollen` und CSS-Höhe in `app.py` (0.4.5) | Feste Container-Höhe über Fensterhöhe; CSS nur auf den Container statt auf seinen Wrapper (`flex: 0 0 800px` gewinnt) |
 | Quarantäne-Attribut auf kopierten Dateien der Mac-App | Kopieren aus dem App-Bundle | Kopieren per `cat` in `macos/Grauzone-launcher.sh` | `cp` für diese Kopie verwenden |
-| Name in PDF-Formularfeld nach Export lesbar über grauem Balken, Wert weiter in der Datei | `apply_redactions()` entfernt keine Formularfelder und Anmerkungen | `oeffne_pdf()` mit `widget.update()` und `doc.bake()` (`app.py`, 0.3.1) | PDF in `app.py` direkt mit `pymupdf.open` öffnen |
+| Name in PDF-Formularfeld nach Export lesbar über grauem Balken, Wert weiter in der Datei | `apply_redactions()` entfernt keine Formularfelder und Anmerkungen | `oeffne_pdf()` mit `widget.update()` und `doc.bake()` (`app.py`, 0.3.1; jetzt `erkennung.py`, Test `test_formularwert_wird_entfernt`) | PDF in `app.py` direkt mit `pymupdf.open` öffnen |
 | Schalter in der Seitenleiste sprang nach dem Einschalten zurück | `st.toggle` mit wechselndem `value=` erzeugt bei jedem Lauf ein neues Widget | Fester `key="update_pruefen"`, Startwert einmal in `st.session_state` (`app.py`, 0.4.0) | Bei Widgets mit gespeichertem Zustand `value=` aus einer Datei ableiten |
 | Nach Update der Mac-App lief weiter der alte Code, Export erneut ungeschwärzt | Starter holte nur den Browser nach vorn, wenn schon ein Server lief | Versionsvergleich und Beenden des alten Servers in `macos/Grauzone-launcher.sh`, Version in der Seitenleiste (`app.py` `lies_version`, 0.3.2) | Bei laufendem Server ohne Versionsvergleich nur den Browser öffnen |
 | `de-core-news-sm` in `requirements.txt` nicht installierbar | Modell ist kein PyPI-Paket | Aus `requirements.txt` entfernt (c47888b) | Modelle in `requirements.txt` eintragen |
@@ -116,7 +117,8 @@ Verworfene Ansätze:
 
 ## 4. Offene Aufgaben
 
-- [ ] Testversion auf `redesign` (siehe Abschnitt „Testversion“): zuerst automatische Tests, dann Layout, dann weitere Funktionen schrittweise (Priorität hoch)
+- [ ] Testversion auf `redesign` (siehe Abschnitt „Testversion“): Tests vorhanden; als Nächstes Layout, dann weitere Funktionen schrittweise (Priorität hoch)
+- [ ] Datumsprüfung `_ist_datum` in `finde` ist beim jetzigen TEL-Muster wirkungslos (kein Datum passt auf das Muster); bei Änderungen am TEL-Muster Test `test_datum_ist_keine_telefonnummer` beachten (niedrig)
 - [ ] Selbst-Update auf 0.4.5 beim Nutzer echt prüfen (Nutzer lief am 2026-11-11 noch mit 0.4.3) (hoch)
 - [ ] EasyOCR ist nicht nach oben begrenzt (installiert 1.7.2) (niedrig)
 - [ ] Dateiname des Exports übernimmt den Originalnamen (`Anonymisiert_<Name>`), der selbst Personennamen enthalten kann (mittel)
@@ -132,10 +134,9 @@ Verworfene Ansätze:
 
 ### Nächster konkreter Schritt
 
-Auf `redesign` automatische Regressionstests anlegen (Grundlage für den Umbau). Dazu zuerst auf jedem Gerät `Grauzone installieren.command` ausführen, damit `venv/` Python 3.11 hat. Dann unter `tests/` mit pytest einen mehrseitigen Durchlauf mit `erkennung.py` ohne Oberfläche prüfen: Ein Test erzeugt mit PyMuPDF ein PDF aus mindestens drei Seiten mit erfundenen Daten: Seite 1 mit Textebene, Seite 2 als eingefügtes Bild ohne Textebene, Seite 3 mit Fundstellen über einen Zeilenumbruch. Je Seite den Ablauf aus `app.py` `scanne` nachbilden (`woerter_aus_textebene`, bei weniger als drei Wörtern `woerter_aus_ocr`, dann `seitentext`, `finde`, `wort_rechteck`), Redaktionen anlegen, `apply_redactions()` aufrufen und speichern. Erwartet: Mit `page.get_text()` steht an keiner geschwärzten Stelle mehr Text; auf der Scan-Seite zeigt das gerenderte Bild keine Buchstabenreste; nicht betroffene Wörter bleiben erhalten. Zusätzlich Formularfeld (über `oeffne_pdf`) und Markdown-Export (`E.markdown`) abdecken. Abweichungen in Abschnitt 3 oder 4 eintragen.
+Mit dem Nutzer das Layout der Testversion abstimmen (ChatGPT-Entwurf als Ausgangspunkt, offene Punkte im Abschnitt „Testversion“), dann als ersten sichtbaren Schritt das Drei-Spalten-Layout in `app.py` umsetzen: links Datei, Seitenübersicht und Einstellungen, Mitte Vorschau, rechts Fundstellen und Export. Fachlogik bleibt in `erkennung.py`. Prüfen: `./venv/bin/python -m unittest discover -s tests` ohne Fehler, danach `START_TEST.command` und mit erfundenem mehrseitigem PDF scannen, abwählen, exportieren.
 
 ## Ungeprüft
 
 - Die lokalen Umgebungen `venv/` (Python 3.9.6, spaCy 3.8.2, numpy 2.0.2, Modelle 3.8.0) und `.venv/` (Python 3.9.6, spaCy 3.5.4, numpy 2.0.2) widersprechen `requirements.txt`. Ob sie noch gebraucht werden, ist offen; `Grauzone installieren.command` würde `venv/` mit Python 3.11 neu anlegen. `.venv/` steht seit dem Branch `redesign` in `.gitignore`.
-- Ob die Version 0.3.0 in der laufenden App vollständig getestet wurde, ist nur durch UEBERGABE.md belegt, nicht durch Tests im Repository.
 - Herkunft und Zweck von `trainingsdaten/` und `dist/run_app.app` (vom 11.05.2026) sind nicht geklärt.

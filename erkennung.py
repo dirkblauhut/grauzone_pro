@@ -9,11 +9,15 @@ Ablauf je PDF-Seite:
   3. Jede Fundstelle auf die Wörter abbilden, die sie abdeckt. Geschwärzt
      werden nur diese Wörter, nicht die ganze Zeile.
 
+Dazu kommen das Öffnen des PDFs (oeffne_pdf) und das Schwärzen beim Export
+(schwaerze), damit Scan, Export und Tests denselben Weg nehmen.
+
 Alle Positionen sind PDF-Punkte (1/72 Zoll) im Koordinatensystem von PyMuPDF.
 Das Modul kennt kein Streamlit und lässt sich daher einzeln testen.
 """
 from __future__ import annotations
 
+import io
 import re
 from dataclasses import dataclass, field
 
@@ -305,3 +309,46 @@ def markdown(seiten, gewaehlt, kopf: str = "", nicht_gescannt=()) -> tuple[str, 
         teile.append("  \n".join(zeilen) if zeilen else "*(kein Text)*")
         teile.append("")
     return "\n".join(teile), anzahl
+
+
+# --- 4. PDF öffnen und schwärzen ------------------------------------------------
+
+def oeffne_pdf(daten: bytes):
+    """Öffnet das PDF und übernimmt Formularfelder und Anmerkungen fest in die Seiten.
+
+    apply_redactions() entfernt nur Seiteninhalt. Werte von Formularfeldern
+    (z. B. "Name") und Anmerkungen (z. B. Notizen) liegen außerhalb davon und
+    blieben sonst lesbar über den Balken stehen.
+    """
+    import pymupdf
+    doc = pymupdf.open(stream=daten, filetype="pdf")
+    for page in doc:
+        for widget in page.widgets():
+            try:
+                widget.update()   # Darstellung aus dem Feldwert erzeugen, falls sie fehlt
+            except Exception:
+                pass
+    doc.bake(annots=True, widgets=True)
+    return doc
+
+
+def schwaerze(daten: bytes, rechtecke: dict[int, list[tuple]]) -> tuple[bytes, int]:
+    """Schwärzt physisch: Text, Bildteile und Vektorgrafik unter den Rechtecken
+    werden entfernt, nicht nur überdeckt. Metadaten werden gelöscht.
+
+    rechtecke: Seitenindex -> Rechtecke (PDF-Punkte); jede genannte Seite wird
+    bereinigt, auch mit leerer Liste. Liefert (PDF-Daten, Anzahl Rechtecke).
+    """
+    import pymupdf
+    doc = oeffne_pdf(daten)
+    anzahl = 0
+    for p, liste in rechtecke.items():
+        page = doc[p]
+        for r in liste:
+            page.add_redact_annot(pymupdf.Rect(*r), fill=(0, 0, 0))
+            anzahl += 1
+        page.apply_redactions()
+    doc.set_metadata({})   # Autor, Titel usw. entfernen
+    puffer = io.BytesIO()
+    doc.save(puffer, garbage=4, deflate=True)
+    return puffer.getvalue(), anzahl

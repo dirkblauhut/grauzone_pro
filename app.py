@@ -182,22 +182,7 @@ def rechtecke(p, fund):
     return [E.wort_rechteck(woerter[i], fund) for i in fund.woerter]
 
 
-def oeffne_pdf(daten):
-    """Öffnet das PDF und übernimmt Formularfelder und Anmerkungen fest in die Seiten.
-
-    apply_redactions() entfernt nur Seiteninhalt. Werte von Formularfeldern
-    (z. B. "Name") und Anmerkungen (z. B. Notizen) liegen außerhalb davon und
-    blieben sonst lesbar über den Balken stehen.
-    """
-    doc = pymupdf.open(stream=daten, filetype="pdf")
-    for page in doc:
-        for widget in page.widgets():
-            try:
-                widget.update()   # Darstellung aus dem Feldwert erzeugen, falls sie fehlt
-            except Exception:
-                pass
-    doc.bake(annots=True, widgets=True)
-    return doc
+oeffne_pdf = E.oeffne_pdf   # Formularfelder und Anmerkungen fest in die Seite (siehe erkennung.py)
 
 
 @st.cache_data(max_entries=300, show_spinner=False)
@@ -329,26 +314,16 @@ if uploaded_file:
             if offen:
                 st.warning(f"Nicht gescannt und daher **nicht geschwärzt**: Seite {', '.join(offen)}")
             if st.button("🔒 SCHWÄRZEN & EXPORT", type="primary", width="stretch"):
-                out = oeffne_pdf(file_content)
-                anzahl = 0
-                for p in gescannt:
-                    page = out[p]
-                    for fund in funde_der_seite(p):
-                        if ist_gewaehlt(p, fund):
-                            for r in rechtecke(p, fund):
-                                page.add_redact_annot(pymupdf.Rect(*r), fill=(0, 0, 0))
-                                anzahl += 1
-                    page.apply_redactions()
-                out.set_metadata({})   # Autor, Titel usw. entfernen
-                puffer = io.BytesIO()
-                out.save(puffer, garbage=4, deflate=True)
+                pdf_daten, anzahl = E.schwaerze(file_content, {
+                    p: [r for fund in funde_der_seite(p) if ist_gewaehlt(p, fund) for r in rechtecke(p, fund)]
+                    for p in gescannt})
                 md, _ = E.markdown(
                     [(p, st.session_state.woerter[p]["text"], funde_der_seite(p)) for p in gescannt],
                     ist_gewaehlt,
                     kopf=f"Erstellt mit {TITEL} am {date.today():%d.%m.%Y}. "
                          "Gleiche Angaben tragen denselben Platzhalter.",
                     nicht_gescannt=[p for p in range(n) if p not in st.session_state.woerter])
-                st.session_state.export = (puffer.getvalue(), md, anzahl, len(gescannt))
+                st.session_state.export = (pdf_daten, md, anzahl, len(gescannt))
             if st.session_state.export:
                 daten, md, anzahl, seiten = st.session_state.export
                 st.success(f"{anzahl} Stellen auf {seiten} Seite(n) geschwärzt.")

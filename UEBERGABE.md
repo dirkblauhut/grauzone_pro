@@ -58,6 +58,7 @@ Die App ist nur ad hoc signiert, nicht notarisiert. macOS fragt beim ersten Öff
 
 ## 5. Testen
 
+- **Automatische Tests (Branch `redesign`):** `./venv/bin/python -m unittest discover -s tests` (wenige Sekunden). Mit `GRAUZONE_OCR_TEST=1` davor läuft zusätzlich der Scan-Test mit Texterkennung (etwa 30 s). Die Tests erzeugen ihre PDFs selbst aus erfundenen Daten.
 - **Erkennung ohne Oberfläche:** `erkennung.py` lässt sich direkt mit PyMuPDF, spaCy und EasyOCR aufrufen (`woerter_aus_textebene` / `woerter_aus_ocr` → `seitentext` → `finde` → `wort_rechteck`). Danach `apply_redactions()` und mit `page.get_text()` prüfen, dass an den geschwärzten Stellen kein Text mehr steht.
 - **Scan-Fall:** Testseite als Bild in ein neues PDF einfügen (ohne Textebene) und das Ergebnis als Bild ansehen: Es dürfen keine Buchstabenreste neben den Balken stehen.
 - **App:** Datenordner mit einem eigenen `HOME` testen, damit der echte `~/Library/Application Support/Grauzone PRO` unberührt bleibt.

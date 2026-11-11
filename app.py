@@ -114,7 +114,7 @@ with st.sidebar.expander("🧠 Lernfortschritt & Gedächtnis", expanded=False):
         st.metric("Immer schwärzen", len(kb["blacklist"]))
     with col_wl:
         st.metric("Nie schwärzen", len(kb["whitelist"]))
-    if st.button("Gedächtnis löschen", use_container_width=True):
+    if st.button("Gedächtnis löschen", width="stretch"):
         st.session_state.kb = {"whitelist": [], "blacklist": []}
         save_knowledge(st.session_state.kb)
         st.rerun()
@@ -213,11 +213,11 @@ if uploaded_file:
     with col_ctrl:
         st.subheader("🕵️ Analyse")
         b1, b2 = st.columns(2)
-        if b1.button("🚀 SEITE SCANNEN", use_container_width=True):
+        if b1.button("🚀 SEITE SCANNEN", width="stretch"):
             with st.spinner("Seite wird gelesen …"):
                 scanne(doc, [p_id], ocr_erzwingen)
             st.rerun()
-        if b2.button("📚 ALLE SEITEN", use_container_width=True):
+        if b2.button("📚 ALLE SEITEN", width="stretch"):
             with st.spinner(f"{n} Seiten werden gelesen …"):
                 scanne(doc, range(n), ocr_erzwingen)
             st.rerun()
@@ -249,7 +249,7 @@ if uploaded_file:
                 zusatz = st.text_input(
                     "Fehlt etwas? Begriff eingeben (mehrere mit Komma trennen)",
                     help="Der Begriff wird auf allen gescannten Seiten geschwärzt und für künftige Dokumente gemerkt.")
-                if st.form_submit_button("➕ Hinzufügen", use_container_width=True) and zusatz.strip():
+                if st.form_submit_button("➕ Hinzufügen", width="stretch") and zusatz.strip():
                     for begriff in [b.strip() for b in zusatz.split(",") if b.strip()]:
                         if not in_liste(begriff, kb["blacklist"]):
                             kb["blacklist"].append(begriff)
@@ -265,7 +265,7 @@ if uploaded_file:
             offen = [str(p + 1) for p in range(n) if p not in st.session_state.woerter]
             if offen:
                 st.warning(f"Nicht gescannt und daher **nicht geschwärzt**: Seite {', '.join(offen)}")
-            if st.button("🔒 SCHWÄRZEN & EXPORT", type="primary", use_container_width=True):
+            if st.button("🔒 SCHWÄRZEN & EXPORT", type="primary", width="stretch"):
                 out = oeffne_pdf(file_content)
                 anzahl = 0
                 for p in gescannt:
@@ -292,9 +292,9 @@ if uploaded_file:
                 name = os.path.splitext(uploaded_file.name)[0]
                 d1, d2 = st.columns(2)
                 d1.download_button("📥 PDF", daten, f"Anonymisiert_{name}.pdf",
-                                   mime="application/pdf", use_container_width=True)
+                                   mime="application/pdf", width="stretch")
                 d2.download_button("📝 Markdown", md.encode("utf-8"), f"Anonymisiert_{name}.md",
-                                   mime="text/markdown", use_container_width=True,
+                                   mime="text/markdown", width="stretch",
                                    help="Text der gescannten Seiten; geschwärzte Stellen als Platzhalter "
                                         "wie [Person 1]. Tabellen und Layout bleiben nicht erhalten.")
 
@@ -310,5 +310,5 @@ if uploaded_file:
                         draw.rectangle(box, fill=(220, 30, 30, 70), outline=(200, 0, 0, 255), width=2)
                     else:
                         draw.rectangle(box, outline=(150, 150, 150, 255), width=1)
-        st.image(bild, use_container_width=True,
+        st.image(bild, width="stretch",
                  caption="Vorschau · rot = wird geschwärzt, grau = abgewählt")

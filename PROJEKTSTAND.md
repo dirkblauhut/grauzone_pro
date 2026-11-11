@@ -1,6 +1,6 @@
 # Projektstand: Grauzone PRO
 
-Stand: 2026-11-11, Branch main, Commit fee11b6 (Release `v0.4.0`), darauf folgt der Commit zu 0.4.1 (`macos/VERSION` = 0.4.1)
+Stand: 2026-11-11, Branch main, Commit ab652df (Release `v0.4.1`), darauf folgt der Commit zu 0.4.2 (`macos/VERSION` = 0.4.2)
 
 Ergänzt [UEBERGABE.md](UEBERGABE.md). Dort stehen Dateiübersicht, Funktionsweise der Mac-App, Release-Ablauf (Abschnitt 4) und Testanleitung (Abschnitt 5). Diese Datei hält Festlegungen, Learnings und Sackgassen fest und wird nicht mit UEBERGABE.md zusammengeführt.
 
@@ -12,7 +12,7 @@ Abschnitt 1 (Festlegungen) und Abschnitt 3 beschreiben abgestimmte und getestete
 
 Zweck: Personenbezogene Daten in PDF-Dokumenten vollständig lokal erkennen und physisch schwärzen.
 
-Stack: Python 3.11 (Mac-App/Installer über uv), Streamlit, PyMuPDF (`fitz`), EasyOCR, spaCy `>=3.5.0,<3.6.0` mit `de_core_news_lg` (Ersatz `de_core_news_sm`, je 3.5.0), `numpy<2`, Pillow, Faker. Versionen von Streamlit, PyMuPDF und EasyOCR sind nicht gepinnt.
+Stack: Python 3.11 (Mac-App/Installer über uv), Streamlit, PyMuPDF (`fitz`), EasyOCR, spaCy `>=3.5.0,<3.6.0` mit `de_core_news_lg` (Ersatz `de_core_news_sm`, je 3.5.0), `numpy<2`, Pillow, Faker. Streamlit `>=1.50,<1.68` (getestet: 1.67.0; `width=` geprüft ab 1.50). PyMuPDF und EasyOCR sind nicht begrenzt (installiert: PyMuPDF 1.26.4 mit MuPDF 2.1).
 
 Struktur:
 - `app.py`: Streamlit-Oberfläche: Hochladen, Scannen (`scanne`, Seite oder alle Seiten), Fundstellenliste, Lernen über `knowledge_base.json`, Export mit `apply_redactions()` und `set_metadata({})`.
@@ -38,6 +38,7 @@ Festlegungen:
 | Auswahl je Seite in `st.session_state.auswahl` | Streamlit verwirft Zustand nicht angezeigter Widgets | Auswahl nur in Checkboxen |
 | Selbst-Update: `macos/grauzone-update.sh` liest Release-Anhang `VERSION`, lädt nach Rückfrage `grauzone-update.tar.gz`, prüft `SHA256SUMS`; Starter übernimmt Dateien aus der App nur, wenn sie neuer sind | Keine neue DMG und keine erneute Gatekeeper-Freigabe je Version | GitHub-API mit JSON (Rate-Limit, Parsing ohne Python); stilles Update ohne Rückfrage |
 | Markdown-Export aus dem gespeicherten Seitentext und denselben Funden wie das PDF (`E.markdown`), Platzhalter `[Art Nr]` je Art und Text nummeriert | PDF und Markdown schwärzen dieselben Stellen; lesbarer als Balken | Text aus dem geschwärzten PDF lesen (Lücken ohne Kennzeichnung); `pymupdf4llm` (zusätzliche AGPL-Abhängigkeit) |
+| Streamlit nach oben begrenzen, `width="stretch"` statt `use_container_width` | Streamlit entfernt abgekündigte Optionen innerhalb von 1.x; ohne Grenze kann eine Neuinstallation brechen | Streamlit unbegrenzt lassen |
 | PDF immer über `oeffne_pdf()` öffnen (Formularfelder und Anmerkungen per `doc.bake()` in die Seite) | Nur so entfernt `apply_redactions()` auch deren Text; Scan und Export sehen denselben Inhalt | Formularfelder unverändert lassen; Felder nur löschen (verliert nicht betroffene Werte) |
 
 Projektvorgaben des Nutzers:
@@ -105,8 +106,8 @@ Verworfene Ansätze:
 
 - [ ] Nächste Version (Ideen des Nutzers vom 2026-11-11, Reihenfolge offen):
   - [ ] Oberfläche modern gestalten (UI/UX)
-- [ ] Release 0.4.1 mit allen vier Anhängen veröffentlichen und damit das Selbst-Update erstmals echt prüfen (Rückfrage beim Start von 0.4.0) (Priorität hoch)
-- [ ] Streamlit ist nicht gepinnt; `use_container_width` ist laut Warnung abgekündigt. Eine neue Streamlit-Version kann die App bei Neuinstallation brechen: auf `width=` umstellen oder Version begrenzen (Priorität hoch)
+- [ ] Release 0.4.2 mit allen vier Anhängen veröffentlichen (Priorität hoch); Selbst-Update von 0.4.0 auf 0.4.1 beim Nutzer echt prüfen
+- [ ] PyMuPDF ist nicht begrenzt; `import fitz` ist laut Warnung abgekündigt (Umstieg auf `import pymupdf` prüfen) (mittel)
 - [ ] Dateiname des Exports übernimmt den Originalnamen (`Anonymisiert_<Name>`), der selbst Personennamen enthalten kann (mittel)
 - [ ] Gleiche Person in anderer Schreibweise („Mustermann, Erika“ / „Erika Mustermann“) bekommt im Markdown verschiedene Nummern (niedrig)
 - [ ] Mehrseitige echte Dokumente testen, Text- und Scan-Seiten gemischt, auch Formulare (Priorität hoch, nächster Schritt)

@@ -1,4 +1,6 @@
-streamlit
+# Streamlit entfernt abgekündigte Optionen auch in 1.x-Versionen. Obergrenze
+# erst anheben, wenn die App mit der neuen Version getestet ist.
+streamlit>=1.50,<1.68
 pymupdf
 pillow
 easyocr

@@ -14,7 +14,7 @@ Grauzone PRO erkennt und schwärzt personenbezogene Daten (Namen, Orte, Organisa
 - **Mehrseitig:** „Alle Seiten“ scannt das ganze Dokument; beim Export werden alle gescannten Seiten geschwärzt. Nicht gescannte Seiten werden vorher deutlich gemeldet.
 - **Prüfen und korrigieren:** Jede Fundstelle steht mit Art (Person, Anschrift, Telefon …) in einer Liste und ist in der Vorschau rot markiert. Abwählen = bleibt stehen; fehlende Begriffe lassen sich eintippen.
 - **Lernt mit:** Abgewählte Stellen („nie schwärzen“) und eingetippte Begriffe („immer schwärzen“) merkt sich `knowledge_base.json` für künftige Dokumente.
-- **Sauberer Export:** Der Text unter den Balken wird aus dem PDF entfernt (bei Scans die Bildpunkte), die Dokument-Metadaten (Autor, Titel) werden gelöscht.
+- **Sauberer Export:** Der Text unter den Balken wird aus dem PDF entfernt (bei Scans die Bildpunkte), die Dokument-Metadaten (Autor, Titel) werden gelöscht. Formularfelder und Anmerkungen werden vorher fest in die Seite übernommen, damit auch ihr Text unter den Balken verschwindet; im Ergebnis sind die Felder nicht mehr ausfüllbar.
 
 > Die Erkennung ist eine Hilfe, keine Garantie. Vor dem Weitergeben jede Seite selbst durchsehen.
 

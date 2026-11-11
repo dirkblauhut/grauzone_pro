@@ -139,6 +139,24 @@ def rechtecke(p, fund):
     return [E.wort_rechteck(woerter[i], fund) for i in fund.woerter]
 
 
+def oeffne_pdf(daten):
+    """Öffnet das PDF und übernimmt Formularfelder und Anmerkungen fest in die Seiten.
+
+    apply_redactions() entfernt nur Seiteninhalt. Werte von Formularfeldern
+    (z. B. "Name") und Anmerkungen (z. B. Notizen) liegen außerhalb davon und
+    blieben sonst lesbar über den Balken stehen.
+    """
+    doc = fitz.open(stream=daten, filetype="pdf")
+    for page in doc:
+        for widget in page.widgets():
+            try:
+                widget.update()   # Darstellung aus dem Feldwert erzeugen, falls sie fehlt
+            except Exception:
+                pass
+    doc.bake(annots=True, widgets=True)
+    return doc
+
+
 def seitenbild(doc, p, zoom):
     pix = doc[p].get_pixmap(matrix=fitz.Matrix(zoom, zoom))
     return Image.open(io.BytesIO(pix.tobytes("png"))).convert("RGB")
@@ -147,7 +165,7 @@ def seitenbild(doc, p, zoom):
 # --- 6. HAUPTBEREICH ---
 if uploaded_file:
     file_content = uploaded_file.getvalue()
-    doc = fitz.open(stream=file_content, filetype="pdf")
+    doc = oeffne_pdf(file_content)
     n = len(doc)
 
     p_id = st.sidebar.number_input(f"Seite (1–{n})", 1, n, 1) - 1
@@ -216,7 +234,7 @@ if uploaded_file:
             if offen:
                 st.warning(f"Nicht gescannt und daher **nicht geschwärzt**: Seite {', '.join(offen)}")
             if st.button("🔒 SCHWÄRZEN & EXPORT", type="primary", use_container_width=True):
-                out = fitz.open(stream=file_content, filetype="pdf")
+                out = oeffne_pdf(file_content)
                 anzahl = 0
                 for p in gescannt:
                     page = out[p]

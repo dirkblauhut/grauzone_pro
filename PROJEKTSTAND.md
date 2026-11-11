@@ -1,6 +1,6 @@
 # Projektstand: Grauzone PRO
 
-Stand: 2026-11-11, Branch main, Commit 8f61481 (Tag `v0.3.0`, `macos/VERSION` = 0.3.0)
+Stand: 2026-11-11, Branch main, Commit 162aebb, darauf folgt der Commit zu 0.3.1 (`macos/VERSION` = 0.3.1; letztes Release-Tag `v0.3.0`)
 
 Ergänzt [UEBERGABE.md](UEBERGABE.md). Dort stehen Dateiübersicht, Funktionsweise der Mac-App, Release-Ablauf (Abschnitt 4) und Testanleitung (Abschnitt 5). Diese Datei hält Festlegungen, Learnings und Sackgassen fest und wird nicht mit UEBERGABE.md zusammengeführt.
 
@@ -36,6 +36,7 @@ Festlegungen:
 | DMG enthält nur Starter, Bibliotheken werden beim ersten Start geladen | Kleine DMG (~470 KB); PyMuPDF (AGPL) wird nicht mitgeliefert | PyInstaller-Bundle (`run_app.py`) |
 | DMG nur als Release-Anhang, nicht im Repository | Commit a29a826 | `download/*.dmg` eingecheckt |
 | Auswahl je Seite in `st.session_state.auswahl` | Streamlit verwirft Zustand nicht angezeigter Widgets | Auswahl nur in Checkboxen |
+| PDF immer über `oeffne_pdf()` öffnen (Formularfelder und Anmerkungen per `doc.bake()` in die Seite) | Nur so entfernt `apply_redactions()` auch deren Text; Scan und Export sehen denselben Inhalt | Formularfelder unverändert lassen; Felder nur löschen (verliert nicht betroffene Werte) |
 
 Projektvorgaben des Nutzers:
 - Ausschließlich lokale Verarbeitung, keine Cloud-Dienste, keine Telemetrie.
@@ -86,6 +87,7 @@ Starten und Testen:
 | Buchstabenreste neben Balken bei Scans | OCR-Wortgrenzen ungenau | Zusätzlicher Rand für OCR-Wörter, `width_ths=0.05` (`erkennung.py:71`, `:238`) | Rand für OCR-Wörter auf Textebenen-Niveau senken |
 | Auswahl auf anderer Seite verloren | Streamlit löscht Zustand verborgener Widgets | `st.session_state.auswahl` (`app.py:189`) | Auswahl nur über Checkbox-Keys halten |
 | Quarantäne-Attribut auf kopierten Dateien der Mac-App | Kopieren aus dem App-Bundle | Kopieren per `cat` in `macos/Grauzone-launcher.sh` | `cp` für diese Kopie verwenden |
+| Name in PDF-Formularfeld nach Export lesbar über grauem Balken, Wert weiter in der Datei | `apply_redactions()` entfernt keine Formularfelder und Anmerkungen | `oeffne_pdf()` mit `widget.update()` und `doc.bake()` (`app.py:142`, 0.3.1) | PDF in `app.py` direkt mit `fitz.open` öffnen |
 | `de-core-news-sm` in `requirements.txt` nicht installierbar | Modell ist kein PyPI-Paket | Aus `requirements.txt` entfernt (c47888b) | Modelle in `requirements.txt` eintragen |
 
 Verworfene Ansätze:
@@ -97,7 +99,9 @@ Verworfene Ansätze:
 
 ## 4. Offene Aufgaben
 
-- [ ] Mehrseitige echte Dokumente testen, Text- und Scan-Seiten gemischt (Priorität hoch, nächster Schritt)
+- [ ] Release 0.3.1 veröffentlichen: DMG anhängen, Tag `v0.3.1` (Priorität hoch)
+- [ ] Mehrseitige echte Dokumente testen, Text- und Scan-Seiten gemischt, auch Formulare (Priorität hoch, nächster Schritt)
+- [ ] Gesundheitsangaben (Art. 9 DSGVO, z. B. „Medikation: 30 mg“), Alter und Datum werden nicht erkannt; Bedarf klären (mittel)
 - [ ] Breitere Balken bei Scans: Wortgrenzen genauer schätzen, ohne Buchstabenreste (mittel)
 - [ ] Whitelist gilt global; versehentlich abgewählte Nachnamen werden in allen Dokumenten übersehen (mittel)
 - [ ] Windows und Gatekeeper-Dialog nach echtem Download testen (mittel)

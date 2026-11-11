@@ -1,6 +1,6 @@
 # Übergabe: Grauzone PRO
 
-Stand: 11.11.2026, Version **0.3.0** (Tag `v0.3.0`, Release mit DMG veröffentlicht)
+Stand: 11.11.2026, Version **0.3.1** (Release für 0.3.1 noch nicht veröffentlicht; zuletzt veröffentlicht: `v0.3.0`)
 
 Dieses Dokument fasst zusammen, wie das Projekt aufgebaut ist, wie man eine neue Version herausbringt und was noch offen ist. Für Nutzerinnen und Nutzer ist die [README](README.md) gedacht.
 
@@ -67,6 +67,7 @@ Die App ist nur ad hoc signiert, nicht notarisiert. macOS fragt beim ersten Öff
 - Ohne `headless = true` wartet Streamlit beim allerersten Start im Terminal auf eine E-Mail-Eingabe.
 - Ohne `address = "localhost"` ist Streamlit im ganzen Netzwerk erreichbar und fragt die öffentliche IP-Adresse ab.
 - Streamlit löscht den Zustand von Widgets, die gerade nicht angezeigt werden. Die Auswahl je Seite liegt deshalb in `st.session_state.auswahl`, nicht nur in den Checkboxen.
+- `apply_redactions()` entfernt nur Seiteninhalt. Werte von Formularfeldern und Anmerkungen blieben bis 0.3.0 lesbar über den Balken stehen. `oeffne_pdf()` in `app.py` übernimmt sie deshalb vor Scan und Export mit `doc.bake()` fest in die Seite.
 
 ## 7. Offene Punkte
 
@@ -85,3 +86,4 @@ Die App ist nur ad hoc signiert, nicht notarisiert. macOS fragt beim ersten Öff
 | 0.1.0 / 0.1.1 | 18.05.2026 | erste Fassung, Schwärzung ganzer OCR-Zeilen |
 | 0.2.0 | 11.11.2026 | Installation per Doppelklick, Mac-App als DMG mit Icon, MIT-Lizenz, Streamlit nur lokal, Modell-Download repariert |
 | 0.3.0 | 11.11.2026 | Schwärzung auf Wortebene, mehr Muster, alle Seiten, Begriffe ergänzen, Metadaten entfernen |
+| 0.3.1 | 11.11.2026 | Formularfelder und Anmerkungen werden mitgeschwärzt (vorher blieb ihr Text lesbar) |

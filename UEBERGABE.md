@@ -1,6 +1,6 @@
 # Übergabe: Grauzone PRO
 
-Stand: 11.11.2026, Version **0.4.2** (Release `v0.4.2` noch nicht veröffentlicht; zuletzt veröffentlicht: `v0.4.1`; `v0.3.1` nur als Tag)
+Stand: 11.11.2026, Version **0.4.3** (Release `v0.4.3` noch nicht veröffentlicht; zuletzt veröffentlicht: `v0.4.2`; `v0.3.1` nur als Tag)
 
 Dieses Dokument fasst zusammen, wie das Projekt aufgebaut ist, wie man eine neue Version herausbringt und was noch offen ist. Für Nutzerinnen und Nutzer ist die [README](README.md) gedacht.
 
@@ -12,7 +12,7 @@ Grauzone PRO schwärzt personenbezogene Daten in PDF-Dokumenten, vollständig lo
 
 | Baustein | Aufgabe |
 |---|---|
-| PyMuPDF (`fitz`) | PDF lesen, Wortpositionen aus der Textebene, Schwärzen (`apply_redactions`) |
+| PyMuPDF (`import pymupdf`) | PDF lesen, Wortpositionen aus der Textebene, Schwärzen (`apply_redactions`) |
 | EasyOCR | Texterkennung für gescannte Seiten (wortweise, `width_ths=0.05`) |
 | spaCy 3.5 + `de_core_news_lg`/`_sm` | Personen, Orte, Organisationen |
 | Streamlit | Oberfläche |
@@ -23,7 +23,7 @@ Grauzone PRO schwärzt personenbezogene Daten in PDF-Dokumenten, vollständig lo
 |---|---|
 | `app.py` | Oberfläche: Hochladen, Scannen (Seite / alle Seiten), Fundstellen-Liste, Lernen, Export |
 | `erkennung.py` | Erkennung ohne Streamlit: Wörter holen, Seitentext bauen, Fundstellen suchen, Rechtecke berechnen, Markdown-Export (`markdown`) |
-| `requirements.txt` | Bibliotheken; **spaCy < 3.6 und numpy < 2 sind Pflicht**; Streamlit auf getestete Versionen begrenzt (`>=1.50,<1.68`) |
+| `requirements.txt` | Bibliotheken; **spaCy < 3.6 und numpy < 2 sind Pflicht**; Streamlit auf getestete Versionen begrenzt (`>=1.50,<1.68`); PyMuPDF je nach Python: 2.1.x ab 3.11, sonst 1.26.x |
 | `.streamlit/config.toml` | nur `localhost`, keine Nutzungsstatistik, `headless` (keine E-Mail-Abfrage) |
 | `Grauzone installieren.command` | Einrichtung aus dem Quellcode per Doppelklick (uv + Python 3.11) |
 | `START_GRAUZONE.command`, `starten.command` | Start nach der Einrichtung |
@@ -67,7 +67,7 @@ Die App ist nur ad hoc signiert, nicht notarisiert. macOS fragt beim ersten Öff
 
 - `python -m spacy download …` funktioniert mit spaCy 3.5 nicht mehr (Link mit Fehler 404). Modelle direkt als Wheel installieren: `https://github.com/explosion/spacy-models/releases/download/<modell>-3.5.0/<modell>-3.5.0-py3-none-any.whl`.
 - spaCy 3.5 läuft nur mit Python bis 3.11 und nur mit numpy 1.x.
-- Streamlit entfernt abgekündigte Optionen auch innerhalb von 1.x (z. B. `use_container_width`). Deshalb ist Streamlit in `requirements.txt` nach oben begrenzt; die Grenze erst anheben, wenn die App mit der neuen Version getestet ist. Abkündigungen erscheinen als Warnung im Terminalfenster.
+- Streamlit entfernt abgekündigte Optionen auch innerhalb von 1.x (z. B. `use_container_width`). Deshalb sind Streamlit und PyMuPDF in `requirements.txt` nach oben begrenzt (PyMuPDF 2.x braucht Python 3.11, daher zwei Zeilen mit `python_version`); die Grenze erst anheben, wenn die App mit der neuen Version getestet ist. Abkündigungen erscheinen als Warnung im Terminalfenster.
 - Ohne `headless = true` wartet Streamlit beim allerersten Start im Terminal auf eine E-Mail-Eingabe.
 - Ohne `address = "localhost"` ist Streamlit im ganzen Netzwerk erreichbar und fragt die öffentliche IP-Adresse ab.
 - Streamlit löscht den Zustand von Widgets, die gerade nicht angezeigt werden. Die Auswahl je Seite liegt deshalb in `st.session_state.auswahl`, nicht nur in den Checkboxen.
@@ -96,3 +96,4 @@ Die App ist nur ad hoc signiert, nicht notarisiert. macOS fragt beim ersten Öff
 | 0.4.0 | 11.11.2026 | Selbst-Update von GitHub nach Rückfrage, abschaltbar in der Seitenleiste |
 | 0.4.1 | 11.11.2026 | Export zusätzlich als Markdown mit nummerierten Platzhaltern |
 | 0.4.2 | 11.11.2026 | `use_container_width` durch `width="stretch"` ersetzt, Streamlit-Version begrenzt |
+| 0.4.3 | 11.11.2026 | `import pymupdf` statt `import fitz`, PyMuPDF-Version begrenzt |

@@ -4,7 +4,7 @@ import os
 from datetime import date
 
 import easyocr
-import fitz
+import pymupdf
 import spacy
 import streamlit as st
 from PIL import Image, ImageDraw
@@ -178,7 +178,7 @@ def oeffne_pdf(daten):
     (z. B. "Name") und Anmerkungen (z. B. Notizen) liegen außerhalb davon und
     blieben sonst lesbar über den Balken stehen.
     """
-    doc = fitz.open(stream=daten, filetype="pdf")
+    doc = pymupdf.open(stream=daten, filetype="pdf")
     for page in doc:
         for widget in page.widgets():
             try:
@@ -190,7 +190,7 @@ def oeffne_pdf(daten):
 
 
 def seitenbild(doc, p, zoom):
-    pix = doc[p].get_pixmap(matrix=fitz.Matrix(zoom, zoom))
+    pix = doc[p].get_pixmap(matrix=pymupdf.Matrix(zoom, zoom))
     return Image.open(io.BytesIO(pix.tobytes("png"))).convert("RGB")
 
 
@@ -273,7 +273,7 @@ if uploaded_file:
                     for fund in funde_der_seite(p):
                         if ist_gewaehlt(p, fund):
                             for r in rechtecke(p, fund):
-                                page.add_redact_annot(fitz.Rect(*r), fill=(0, 0, 0))
+                                page.add_redact_annot(pymupdf.Rect(*r), fill=(0, 0, 0))
                                 anzahl += 1
                     page.apply_redactions()
                 out.set_metadata({})   # Autor, Titel usw. entfernen

@@ -62,8 +62,8 @@ def woerter_aus_ocr(reader, page, zoom: float = 2.5) -> list[list[Wort]]:
     Stück doch mehrere Wörter, wird es anhand der Zeichenzahl anteilig zerlegt;
     solche Positionen sind ungenau und bekommen beim Schwärzen mehr Rand.
     """
-    import fitz
-    pix = page.get_pixmap(matrix=fitz.Matrix(zoom, zoom))
+    import pymupdf
+    pix = page.get_pixmap(matrix=pymupdf.Matrix(zoom, zoom))
     bild = np.frombuffer(pix.samples, dtype=np.uint8).reshape(pix.height, pix.width, pix.n)
     if pix.n == 4:
         bild = bild[:, :, :3]

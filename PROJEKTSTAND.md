@@ -1,6 +1,6 @@
 # Projektstand: Grauzone PRO
 
-Stand: 2026-11-11, Branch main, Commit ab652df (Release `v0.4.1`), darauf folgt der Commit zu 0.4.2 (`macos/VERSION` = 0.4.2)
+Stand: 2026-11-11, Branch main, Commit 4a23fa8 (Release `v0.4.2`), darauf folgt der Commit zu 0.4.3 (`macos/VERSION` = 0.4.3)
 
 Ergänzt [UEBERGABE.md](UEBERGABE.md). Dort stehen Dateiübersicht, Funktionsweise der Mac-App, Release-Ablauf (Abschnitt 4) und Testanleitung (Abschnitt 5). Diese Datei hält Festlegungen, Learnings und Sackgassen fest und wird nicht mit UEBERGABE.md zusammengeführt.
 
@@ -12,7 +12,7 @@ Abschnitt 1 (Festlegungen) und Abschnitt 3 beschreiben abgestimmte und getestete
 
 Zweck: Personenbezogene Daten in PDF-Dokumenten vollständig lokal erkennen und physisch schwärzen.
 
-Stack: Python 3.11 (Mac-App/Installer über uv), Streamlit, PyMuPDF (`fitz`), EasyOCR, spaCy `>=3.5.0,<3.6.0` mit `de_core_news_lg` (Ersatz `de_core_news_sm`, je 3.5.0), `numpy<2`, Pillow, Faker. Streamlit `>=1.50,<1.68` (getestet: 1.67.0; `width=` geprüft ab 1.50). PyMuPDF und EasyOCR sind nicht begrenzt (installiert: PyMuPDF 1.26.4 mit MuPDF 2.1).
+Stack: Python 3.11 (Mac-App/Installer über uv), Streamlit, PyMuPDF (`import pymupdf`), EasyOCR, spaCy `>=3.5.0,<3.6.0` mit `de_core_news_lg` (Ersatz `de_core_news_sm`, je 3.5.0), `numpy<2`, Pillow, Faker. Streamlit `>=1.50,<1.68` (getestet: 1.67.0; `width=` geprüft ab 1.50). PyMuPDF `>=2.1,<2.2` ab Python 3.11, sonst `>=1.26.5,<1.27` (beide getestet). EasyOCR ist nicht begrenzt (installiert: 1.7.2).
 
 Struktur:
 - `app.py`: Streamlit-Oberfläche: Hochladen, Scannen (`scanne`, Seite oder alle Seiten), Fundstellenliste, Lernen über `knowledge_base.json`, Export mit `apply_redactions()` und `set_metadata({})`.
@@ -38,7 +38,7 @@ Festlegungen:
 | Auswahl je Seite in `st.session_state.auswahl` | Streamlit verwirft Zustand nicht angezeigter Widgets | Auswahl nur in Checkboxen |
 | Selbst-Update: `macos/grauzone-update.sh` liest Release-Anhang `VERSION`, lädt nach Rückfrage `grauzone-update.tar.gz`, prüft `SHA256SUMS`; Starter übernimmt Dateien aus der App nur, wenn sie neuer sind | Keine neue DMG und keine erneute Gatekeeper-Freigabe je Version | GitHub-API mit JSON (Rate-Limit, Parsing ohne Python); stilles Update ohne Rückfrage |
 | Markdown-Export aus dem gespeicherten Seitentext und denselben Funden wie das PDF (`E.markdown`), Platzhalter `[Art Nr]` je Art und Text nummeriert | PDF und Markdown schwärzen dieselben Stellen; lesbarer als Balken | Text aus dem geschwärzten PDF lesen (Lücken ohne Kennzeichnung); `pymupdf4llm` (zusätzliche AGPL-Abhängigkeit) |
-| Streamlit nach oben begrenzen, `width="stretch"` statt `use_container_width` | Streamlit entfernt abgekündigte Optionen innerhalb von 1.x; ohne Grenze kann eine Neuinstallation brechen | Streamlit unbegrenzt lassen |
+| Streamlit und PyMuPDF nach oben auf getestete Versionen begrenzen; `width="stretch"` statt `use_container_width`; `import pymupdf` statt `import fitz` | Abgekündigte Optionen und Namen können in neuen Versionen entfallen; ohne Grenze kann eine Neuinstallation brechen | Bibliotheken unbegrenzt lassen |
 | PDF immer über `oeffne_pdf()` öffnen (Formularfelder und Anmerkungen per `doc.bake()` in die Seite) | Nur so entfernt `apply_redactions()` auch deren Text; Scan und Export sehen denselben Inhalt | Formularfelder unverändert lassen; Felder nur löschen (verliert nicht betroffene Werte) |
 
 Projektvorgaben des Nutzers:
@@ -88,9 +88,9 @@ Starten und Testen:
 | Datum als Telefonnummer erkannt | TEL-Muster zu weit | `_ist_datum` und Mindestziffern in `finde` (`erkennung.py:170`) | Prüfung beim Ändern des TEL-Musters entfernen |
 | Absender und Anschrift als eine Fundstelle | spaCy-Entitäten über Zeilenumbrüche | Aufteilen an `\n` (`erkennung.py:162`) | Entitäten ungeteilt übernehmen |
 | Buchstabenreste neben Balken bei Scans | OCR-Wortgrenzen ungenau | Zusätzlicher Rand für OCR-Wörter, `width_ths=0.05` (`erkennung.py:71`, `:238`) | Rand für OCR-Wörter auf Textebenen-Niveau senken |
-| Auswahl auf anderer Seite verloren | Streamlit löscht Zustand verborgener Widgets | `st.session_state.auswahl` (`app.py:189`) | Auswahl nur über Checkbox-Keys halten |
+| Auswahl auf anderer Seite verloren | Streamlit löscht Zustand verborgener Widgets | `st.session_state.auswahl` (`app.py:239`) | Auswahl nur über Checkbox-Keys halten |
 | Quarantäne-Attribut auf kopierten Dateien der Mac-App | Kopieren aus dem App-Bundle | Kopieren per `cat` in `macos/Grauzone-launcher.sh` | `cp` für diese Kopie verwenden |
-| Name in PDF-Formularfeld nach Export lesbar über grauem Balken, Wert weiter in der Datei | `apply_redactions()` entfernt keine Formularfelder und Anmerkungen | `oeffne_pdf()` mit `widget.update()` und `doc.bake()` (`app.py:142`, 0.3.1) | PDF in `app.py` direkt mit `fitz.open` öffnen |
+| Name in PDF-Formularfeld nach Export lesbar über grauem Balken, Wert weiter in der Datei | `apply_redactions()` entfernt keine Formularfelder und Anmerkungen | `oeffne_pdf()` mit `widget.update()` und `doc.bake()` (`app.py`, 0.3.1) | PDF in `app.py` direkt mit `pymupdf.open` öffnen |
 | Schalter in der Seitenleiste sprang nach dem Einschalten zurück | `st.toggle` mit wechselndem `value=` erzeugt bei jedem Lauf ein neues Widget | Fester `key="update_pruefen"`, Startwert einmal in `st.session_state` (`app.py`, 0.4.0) | Bei Widgets mit gespeichertem Zustand `value=` aus einer Datei ableiten |
 | Nach Update der Mac-App lief weiter der alte Code, Export erneut ungeschwärzt | Starter holte nur den Browser nach vorn, wenn schon ein Server lief | Versionsvergleich und Beenden des alten Servers in `macos/Grauzone-launcher.sh`, Version in der Seitenleiste (`app.py` `lies_version`, 0.3.2) | Bei laufendem Server ohne Versionsvergleich nur den Browser öffnen |
 | `de-core-news-sm` in `requirements.txt` nicht installierbar | Modell ist kein PyPI-Paket | Aus `requirements.txt` entfernt (c47888b) | Modelle in `requirements.txt` eintragen |
@@ -106,8 +106,8 @@ Verworfene Ansätze:
 
 - [ ] Nächste Version (Ideen des Nutzers vom 2026-11-11, Reihenfolge offen):
   - [ ] Oberfläche modern gestalten (UI/UX)
-- [ ] Release 0.4.2 mit allen vier Anhängen veröffentlichen (Priorität hoch); Selbst-Update von 0.4.0 auf 0.4.1 beim Nutzer echt prüfen
-- [ ] PyMuPDF ist nicht begrenzt; `import fitz` ist laut Warnung abgekündigt (Umstieg auf `import pymupdf` prüfen) (mittel)
+- [ ] Release 0.4.3 mit allen vier Anhängen veröffentlichen (Priorität hoch); Selbst-Update von 0.4.0 auf 0.4.1 beim Nutzer echt prüfen
+- [ ] EasyOCR ist nicht nach oben begrenzt (installiert 1.7.2) (niedrig)
 - [ ] Dateiname des Exports übernimmt den Originalnamen (`Anonymisiert_<Name>`), der selbst Personennamen enthalten kann (mittel)
 - [ ] Gleiche Person in anderer Schreibweise („Mustermann, Erika“ / „Erika Mustermann“) bekommt im Markdown verschiedene Nummern (niedrig)
 - [ ] Mehrseitige echte Dokumente testen, Text- und Scan-Seiten gemischt, auch Formulare (Priorität hoch, nächster Schritt)

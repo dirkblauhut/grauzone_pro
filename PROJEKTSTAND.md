@@ -1,6 +1,6 @@
 # Projektstand: Grauzone PRO
 
-Stand: 2026-11-11, Branch main, Commit 4a23fa8 (Release `v0.4.2`), darauf folgt der Commit zu 0.4.3 (`macos/VERSION` = 0.4.3)
+Stand: 2026-11-11, Branch main, Commit 7196aac (Release `v0.4.3`), darauf folgt der Commit zu 0.4.4 (`macos/VERSION` = 0.4.4)
 
 Ergänzt [UEBERGABE.md](UEBERGABE.md). Dort stehen Dateiübersicht, Funktionsweise der Mac-App, Release-Ablauf (Abschnitt 4) und Testanleitung (Abschnitt 5). Diese Datei hält Festlegungen, Learnings und Sackgassen fest und wird nicht mit UEBERGABE.md zusammengeführt.
 
@@ -39,6 +39,7 @@ Festlegungen:
 | Selbst-Update: `macos/grauzone-update.sh` liest Release-Anhang `VERSION`, lädt nach Rückfrage `grauzone-update.tar.gz`, prüft `SHA256SUMS`; Starter übernimmt Dateien aus der App nur, wenn sie neuer sind | Keine neue DMG und keine erneute Gatekeeper-Freigabe je Version | GitHub-API mit JSON (Rate-Limit, Parsing ohne Python); stilles Update ohne Rückfrage |
 | Markdown-Export aus dem gespeicherten Seitentext und denselben Funden wie das PDF (`E.markdown`), Platzhalter `[Art Nr]` je Art und Text nummeriert | PDF und Markdown schwärzen dieselben Stellen; lesbarer als Balken | Text aus dem geschwärzten PDF lesen (Lücken ohne Kennzeichnung); `pymupdf4llm` (zusätzliche AGPL-Abhängigkeit) |
 | Streamlit und PyMuPDF nach oben auf getestete Versionen begrenzen; `width="stretch"` statt `use_container_width`; `import pymupdf` statt `import fitz` | Abgekündigte Optionen und Namen können in neuen Versionen entfallen; ohne Grenze kann eine Neuinstallation brechen | Bibliotheken unbegrenzt lassen |
+| Vorschau mit allen Seiten in einem scrollbaren Container, Fundstellen-Liste nur für die gewählte Seite (`st.session_state.seite`); Seitenbilder per `st.cache_data` (`seitenbild`), Funde je Seite in `st.session_state.funde_speicher` | Streamlit kennt die Scrollposition nicht; Zwischenspeicher hält das Neuzeichnen aller Seiten schnell | Seitenwahl nur über Zahlenfeld (bis 0.4.3) |
 | PDF immer über `oeffne_pdf()` öffnen (Formularfelder und Anmerkungen per `doc.bake()` in die Seite) | Nur so entfernt `apply_redactions()` auch deren Text; Scan und Export sehen denselben Inhalt | Formularfelder unverändert lassen; Felder nur löschen (verliert nicht betroffene Werte) |
 
 Projektvorgaben des Nutzers:
@@ -106,11 +107,11 @@ Verworfene Ansätze:
 
 - [ ] Nächste Version (Ideen des Nutzers vom 2026-11-11, Reihenfolge offen):
   - [ ] Oberfläche modern gestalten (UI/UX)
-- [ ] Release 0.4.3 mit allen vier Anhängen veröffentlichen (Priorität hoch); Selbst-Update von 0.4.0 auf 0.4.1 beim Nutzer echt prüfen
+- [ ] Release 0.4.4 mit allen vier Anhängen veröffentlichen (Priorität hoch); Selbst-Update von 0.4.0 auf 0.4.1 beim Nutzer echt prüfen
 - [ ] EasyOCR ist nicht nach oben begrenzt (installiert 1.7.2) (niedrig)
 - [ ] Dateiname des Exports übernimmt den Originalnamen (`Anonymisiert_<Name>`), der selbst Personennamen enthalten kann (mittel)
 - [ ] Gleiche Person in anderer Schreibweise („Mustermann, Erika“ / „Erika Mustermann“) bekommt im Markdown verschiedene Nummern (niedrig)
-- [ ] Mehrseitige echte Dokumente testen, Text- und Scan-Seiten gemischt, auch Formulare (Priorität hoch, nächster Schritt)
+- [ ] Mehrseitige echte Dokumente testen, Text- und Scan-Seiten gemischt, auch Formulare; dabei Tempo der Vorschau bei vielen Seiten prüfen (Priorität hoch, nächster Schritt)
 - [ ] Gesundheitsangaben (Art. 9 DSGVO, z. B. „Medikation: 30 mg“), Alter und Datum werden nicht erkannt; Bedarf klären (mittel)
 - [ ] Breitere Balken bei Scans: Wortgrenzen genauer schätzen, ohne Buchstabenreste (mittel)
 - [ ] Whitelist gilt global; versehentlich abgewählte Nachnamen werden in allen Dokumenten übersehen (mittel)

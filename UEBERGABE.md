@@ -1,6 +1,6 @@
 # Übergabe: Grauzone PRO
 
-Stand: 11.11.2026, Version **0.4.3** (Release `v0.4.3` noch nicht veröffentlicht; zuletzt veröffentlicht: `v0.4.2`; `v0.3.1` nur als Tag)
+Stand: 11.11.2026, Version **0.4.4** (Release `v0.4.4` noch nicht veröffentlicht; zuletzt veröffentlicht: `v0.4.3`; `v0.3.1` nur als Tag)
 
 Dieses Dokument fasst zusammen, wie das Projekt aufgebaut ist, wie man eine neue Version herausbringt und was noch offen ist. Für Nutzerinnen und Nutzer ist die [README](README.md) gedacht.
 
@@ -68,6 +68,7 @@ Die App ist nur ad hoc signiert, nicht notarisiert. macOS fragt beim ersten Öff
 - `python -m spacy download …` funktioniert mit spaCy 3.5 nicht mehr (Link mit Fehler 404). Modelle direkt als Wheel installieren: `https://github.com/explosion/spacy-models/releases/download/<modell>-3.5.0/<modell>-3.5.0-py3-none-any.whl`.
 - spaCy 3.5 läuft nur mit Python bis 3.11 und nur mit numpy 1.x.
 - Streamlit entfernt abgekündigte Optionen auch innerhalb von 1.x (z. B. `use_container_width`). Deshalb sind Streamlit und PyMuPDF in `requirements.txt` nach oben begrenzt (PyMuPDF 2.x braucht Python 3.11, daher zwei Zeilen mit `python_version`); die Grenze erst anheben, wenn die App mit der neuen Version getestet ist. Abkündigungen erscheinen als Warnung im Terminalfenster.
+- Die gewählte Seite liegt in `st.session_state.seite` (Schlüssel des Seitenzahl-Feldes). Pfeile und „Bearbeiten“ ändern sie per `on_click`, weil Streamlit den Wert eines Widgets nach dessen Anzeige im selben Durchlauf nicht mehr ändern lässt.
 - Ohne `headless = true` wartet Streamlit beim allerersten Start im Terminal auf eine E-Mail-Eingabe.
 - Ohne `address = "localhost"` ist Streamlit im ganzen Netzwerk erreichbar und fragt die öffentliche IP-Adresse ab.
 - Streamlit löscht den Zustand von Widgets, die gerade nicht angezeigt werden. Die Auswahl je Seite liegt deshalb in `st.session_state.auswahl`, nicht nur in den Checkboxen.
@@ -97,3 +98,4 @@ Die App ist nur ad hoc signiert, nicht notarisiert. macOS fragt beim ersten Öff
 | 0.4.1 | 11.11.2026 | Export zusätzlich als Markdown mit nummerierten Platzhaltern |
 | 0.4.2 | 11.11.2026 | `use_container_width` durch `width="stretch"` ersetzt, Streamlit-Version begrenzt |
 | 0.4.3 | 11.11.2026 | `import pymupdf` statt `import fitz`, PyMuPDF-Version begrenzt |
+| 0.4.4 | 11.11.2026 | Vorschau zeigt alle Seiten zum Scrollen, Blättern mit ◀ ▶ und „Bearbeiten“ |

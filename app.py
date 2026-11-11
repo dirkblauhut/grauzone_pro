@@ -135,6 +135,8 @@ if uploaded_file is not None and uploaded_file.name != st.session_state.last_upl
     st.session_state.woerter = {}
     st.session_state.auswahl = {}
     st.session_state.export = None
+    st.session_state.funde_speicher = {}
+    st.session_state.seite = 1
     st.rerun()
 
 
@@ -151,14 +153,21 @@ def scanne(doc, seiten, ocr_erzwingen):
             quelle = "Texterkennung"
         text, woerter = E.seitentext(zeilen)
         st.session_state.woerter[p] = {"text": text, "woerter": woerter, "quelle": quelle}
+    st.session_state.funde_speicher = {}
     st.session_state.export = None
 
 
 def funde_der_seite(p):
+    """Fundstellen einer gescannten Seite; zwischengespeichert, bis die Seite neu
+    gescannt wird oder sich die Liste „immer schwärzen“ ändert."""
     daten = st.session_state.woerter.get(p)
     if not daten:
         return []
-    return E.finde(daten["text"], daten["woerter"], nlp, NAME_DATABASE, kb["blacklist"])
+    schluessel = (p, id(daten), tuple(kb["blacklist"]))
+    speicher = st.session_state.setdefault("funde_speicher", {})
+    if schluessel not in speicher:
+        speicher[schluessel] = E.finde(daten["text"], daten["woerter"], nlp, NAME_DATABASE, kb["blacklist"])
+    return speicher[schluessel]
 
 
 def ist_gewaehlt(p, fund):
@@ -189,9 +198,30 @@ def oeffne_pdf(daten):
     return doc
 
 
-def seitenbild(doc, p, zoom):
-    pix = doc[p].get_pixmap(matrix=pymupdf.Matrix(zoom, zoom))
+@st.cache_data(max_entries=300, show_spinner=False)
+def seitenbild(_doc, datei_id, p, zoom):
+    """Seite als Bild; zwischengespeichert je Datei, Seite und Zoom (datei_id ersetzt _doc als Schlüssel)."""
+    pix = _doc[p].get_pixmap(matrix=pymupdf.Matrix(zoom, zoom))
     return Image.open(io.BytesIO(pix.tobytes("png"))).convert("RGB")
+
+
+def vorschau(doc, datei_id, p, zoom):
+    """Seitenbild mit Markierungen: rot = wird geschwärzt, grau = abgewählt."""
+    bild = seitenbild(doc, datei_id, p, zoom).copy()
+    if p in st.session_state.woerter:
+        draw = ImageDraw.Draw(bild, "RGBA")
+        for fund in funde_der_seite(p):
+            for x0, y0, x1, y1 in rechtecke(p, fund):
+                box = [x0 * zoom, y0 * zoom, x1 * zoom, y1 * zoom]
+                if ist_gewaehlt(p, fund):
+                    draw.rectangle(box, fill=(220, 30, 30, 70), outline=(200, 0, 0, 255), width=2)
+                else:
+                    draw.rectangle(box, outline=(150, 150, 150, 255), width=1)
+    return bild
+
+
+def gehe_zu(seite):
+    st.session_state.seite = seite
 
 
 # --- 6. HAUPTBEREICH ---
@@ -200,7 +230,14 @@ if uploaded_file:
     doc = oeffne_pdf(file_content)
     n = len(doc)
 
-    p_id = st.sidebar.number_input(f"Seite (1–{n})", 1, n, 1) - 1
+    datei_id = (uploaded_file.name, len(file_content))
+    if not 1 <= st.session_state.get("seite", 1) <= n:
+        st.session_state.seite = 1
+    p_id = st.sidebar.number_input(f"Seite (1–{n})", 1, n, key="seite") - 1
+    alle_zeigen = st.sidebar.toggle(
+        "Alle Seiten untereinander zeigen", value=n > 1,
+        help="Die Vorschau zeigt alle Seiten zum Durchscrollen. Die Fundstellen-Liste "
+             "rechts gehört zur gewählten Seite; wählen per „Bearbeiten“, Pfeilen oder Seitenzahl.")
     zoom_preview = st.sidebar.slider("Vorschau-Zoom", 0.5, 2.0, 1.0)
     ocr_erzwingen = st.sidebar.checkbox(
         "Immer Texterkennung (OCR) verwenden",
@@ -299,16 +336,24 @@ if uploaded_file:
                                         "wie [Person 1]. Tabellen und Layout bleiben nicht erhalten.")
 
     with col_view:
-        bild = seitenbild(doc, p_id, zoom_preview)
-        draw = ImageDraw.Draw(bild, "RGBA")
-        if p_id in st.session_state.woerter:
-            for fund in funde:
-                gewaehlt = ist_gewaehlt(p_id, fund)
-                for x0, y0, x1, y1 in rechtecke(p_id, fund):
-                    box = [x0 * zoom_preview, y0 * zoom_preview, x1 * zoom_preview, y1 * zoom_preview]
-                    if gewaehlt:
-                        draw.rectangle(box, fill=(220, 30, 30, 70), outline=(200, 0, 0, 255), width=2)
-                    else:
-                        draw.rectangle(box, outline=(150, 150, 150, 255), width=1)
-        st.image(bild, width="stretch",
-                 caption="Vorschau · rot = wird geschwärzt, grau = abgewählt")
+        # Blättern: Pfeile und Anzeige der gewählten Seite
+        n1, n2, n3 = st.columns([1, 4, 1])
+        n1.button("◀", on_click=gehe_zu, args=(p_id,), disabled=p_id == 0,
+                  width="stretch", help="Vorige Seite")
+        n2.markdown(f"<div style='text-align:center;padding-top:.4rem'><b>Seite {p_id + 1} von {n}</b></div>",
+                    unsafe_allow_html=True)
+        n3.button("▶", on_click=gehe_zu, args=(p_id + 2,), disabled=p_id == n - 1,
+                  width="stretch", help="Nächste Seite")
+
+        st.caption("Rot = wird geschwärzt, grau = abgewählt.")
+        if alle_zeigen and n > 1:
+            with st.container(height=900):
+                for p in range(n):
+                    k1, k2 = st.columns([3, 1])
+                    status = "gescannt" if p in st.session_state.woerter else "nicht gescannt"
+                    k1.markdown(f"**{'▶ ' if p == p_id else ''}Seite {p + 1}** · {status}")
+                    k2.button("Bearbeiten", key=f"bearbeiten_{p}", on_click=gehe_zu, args=(p + 1,),
+                              disabled=p == p_id, width="stretch")
+                    st.image(vorschau(doc, datei_id, p, zoom_preview), width="stretch")
+        else:
+            st.image(vorschau(doc, datei_id, p_id, zoom_preview), width="stretch")

@@ -1,6 +1,6 @@
 # Projektstand: Grauzone PRO
 
-Stand: 2026-11-12, Branch main, Version 0.5.1 (0.5.0 vom Nutzer veröffentlicht, 0.5.1 steht zur Veröffentlichung auf dem Mac an)
+Stand: 2026-11-12, Branch main, Version 0.5.1 (0.5.0 und 0.5.1 vom Nutzer veröffentlicht)
 
 Ergänzt [UEBERGABE.md](UEBERGABE.md). Dort stehen Dateiübersicht, Funktionsweise der Mac-App, Release-Ablauf (Abschnitt 4) und Testanleitung (Abschnitt 5). Diese Datei hält Festlegungen, Learnings und Sackgassen fest und wird nicht mit UEBERGABE.md zusammengeführt.
 
@@ -121,7 +121,7 @@ Verworfene Ansätze:
 
 ## 4. Offene Aufgaben
 
-- [ ] Release 0.5.1 mit allen vier Anhängen auf dem Mac bauen und veröffentlichen; Selbst-Update von 0.5.0 auf 0.5.1 prüfen; Aufräumen auf den Macs (Priorität hoch)
+- [ ] Selbst-Update von 0.5.0 auf 0.5.1 auf einem Mac mit installierter App prüfen; Branch `redesign` auf GitHub löschen (`git push origin --delete redesign`, aus der Cloud-Sitzung nicht möglich); Aufräumen auf den Macs (Priorität hoch)
 - [ ] `st.components.v1.html` (Scroll-Sprung in `zur_seite_scrollen`, auch in 0.4.5) ist ab Streamlit 1.68 abgekündigt, Ersatz `st.iframe`; vor Anheben der Grenze `<1.68` umstellen und Sprung im Browser prüfen (mittel)
 - [ ] Datumsprüfung `_ist_datum` in `finde` ist beim jetzigen TEL-Muster wirkungslos (kein Datum passt auf das Muster); bei Änderungen am TEL-Muster Test `test_datum_ist_keine_telefonnummer` beachten (niedrig)
 - [ ] EasyOCR ist nicht nach oben begrenzt (installiert 1.7.2) (niedrig)
@@ -140,7 +140,7 @@ Verworfene Ansätze:
 
 ### Nächster konkreter Schritt
 
-Stand 2026-11-12: 0.5.0 veröffentlicht, 0.5.1 (Fundliste erscheint sofort) auf `main`. Als Nächstes: Release 0.5.1 auf dem Mac (Ablauf UEBERGABE.md, Abschnitt 4), danach Selbst-Update prüfen und überflüssige Dateien auf den Macs löschen. Danach: Test mit echten mehrseitigen Dokumenten (Text und Scan gemischt, Formulare, Tempo der Vorschau), dann die nächste Funktion aus dem Entwurf mit dem Nutzer wählen (Vorschlag: Fundstellen direkt in der Vorschau anklicken, oder Rückgängig). Prüfen vor jedem Commit: `./venv/bin/python -m unittest discover -s tests`.
+Stand 2026-11-12: 0.5.0 und 0.5.1 veröffentlicht. Als Nächstes: Selbst-Update prüfen, Branch `redesign` löschen, überflüssige Dateien auf den Macs löschen. Hinweis: Tags, Branch-Löschen und Release anlegen scheitern aus der Cloud-Sitzung (Verbindungsabbruch, DMG braucht macOS); das läuft auf dem Mac. Danach: Test mit echten mehrseitigen Dokumenten (Text und Scan gemischt, Formulare, Tempo der Vorschau), dann die nächste Funktion aus dem Entwurf mit dem Nutzer wählen (Vorschlag: Fundstellen direkt in der Vorschau anklicken, oder Rückgängig). Prüfen vor jedem Commit: `./venv/bin/python -m unittest discover -s tests`.
 
 ## Ungeprüft
 

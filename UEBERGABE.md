@@ -58,10 +58,9 @@ Die App ist nur ad hoc signiert, nicht notarisiert. macOS fragt beim ersten Öff
 
 ## 5. Testen
 
-- **Automatische Tests (Branch `redesign`):** `./venv/bin/python -m unittest discover -s tests` (wenige Sekunden). Mit `GRAUZONE_OCR_TEST=1` davor läuft zusätzlich der Scan-Test mit Texterkennung (etwa 30 s). Die Tests erzeugen ihre PDFs selbst aus erfundenen Daten.
+- **Automatische Tests:** `./venv/bin/python -m unittest discover -s tests` (wenige Sekunden). Mit `GRAUZONE_OCR_TEST=1` davor läuft zusätzlich der Scan-Test mit Texterkennung (etwa 30 s). Die Tests erzeugen ihre PDFs selbst aus erfundenen Daten.
 - **Erkennung ohne Oberfläche:** `erkennung.py` lässt sich direkt mit PyMuPDF, spaCy und EasyOCR aufrufen (`woerter_aus_textebene` / `woerter_aus_ocr` → `seitentext` → `finde` → `wort_rechteck`). Danach `apply_redactions()` und mit `page.get_text()` prüfen, dass an den geschwärzten Stellen kein Text mehr steht.
 - **Scan-Fall:** Testseite als Bild in ein neues PDF einfügen (ohne Textebene) und das Ergebnis als Bild ansehen: Es dürfen keine Buchstabenreste neben den Balken stehen.
-- **Automatische Tests:** `tests/test_export_pruefung.py` (Bereinigung und Prüfung des Exports mit erfundenen Daten). Aufruf im Projektordner: `./venv/bin/python -m unittest discover -s tests`. Auf dem Branch `redesign` liegen zusätzlich die Tests für Erkennung, Schwärzung und Oberfläche.
 - **App:** Datenordner mit einem eigenen `HOME` testen, damit der echte `~/Library/Application Support/Grauzone PRO` unberührt bleibt.
 - Nur erfundene Testdaten verwenden (z. B. „Erika Mustermann, Musterstadt“).
 
@@ -104,4 +103,4 @@ Die App ist nur ad hoc signiert, nicht notarisiert. macOS fragt beim ersten Öff
 | 0.4.5 | 11.11.2026 | ◀ ▶, Seitenzahl und Schalter scrollen die Vorschau zur Seite; Scrollbereich passt sich der Fensterhöhe an |
 | 0.4.6 | 12.11.2026 | Erkennung: Name über Zeilenumbruch nach Anrede, Name nach Feldbezeichnung („Absender:“), E-Mail und IBAN auch bei OCR-Fehlern auf Scan-Seiten |
 | 0.4.7 | 12.11.2026 | Export entfernt zusätzlich XMP-Metadaten, Lesezeichen und eingebettete Dateien, prüft das fertige PDF (Text und Helligkeit unter den Balken, Metadaten, Anmerkungen, Formularfelder); Schaltfläche „Beenden“ |
-| 0.5.0-test | 12.11.2026 | (nur Branch `redesign`) Prüfprotokoll als Markdown-Download ohne Originaldaten |
+| 0.5.0 | 12.11.2026 | Neue Oberfläche in drei Spalten mit Kopfzeile, Fundstellenkarten und Filter, Seitenübersicht, Prüfprotokoll als Markdown-Download ohne Originaldaten, Symbol der App im Browser, „Beenden“ ohne Fehlerdialog; Regressionstests |

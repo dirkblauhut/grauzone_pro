@@ -1,6 +1,6 @@
 # Projektstand: Grauzone PRO
 
-Stand: 2026-11-12, Branch redesign (abgezweigt von main bei 53bf816, Release `v0.4.5`; `main` bis 0.4.7 am 2026-11-12 eingearbeitet)
+Stand: 2026-11-12, Branch main, Version 0.5.0 (neue Oberfläche, vorbereitet; Release `v0.4.5` ist das letzte veröffentlichte, 0.4.7 und 0.5.0 stehen zur Veröffentlichung auf dem Mac an)
 
 Ergänzt [UEBERGABE.md](UEBERGABE.md). Dort stehen Dateiübersicht, Funktionsweise der Mac-App, Release-Ablauf (Abschnitt 4) und Testanleitung (Abschnitt 5). Diese Datei hält Festlegungen, Learnings und Sackgassen fest und wird nicht mit UEBERGABE.md zusammengeführt.
 
@@ -8,16 +8,15 @@ Ergänzt [UEBERGABE.md](UEBERGABE.md). Dort stehen Dateiübersicht, Funktionswei
 
 Abschnitt 1 (Festlegungen) und Abschnitt 3 beschreiben abgestimmte und getestete Lösungen. Sie werden nicht geändert, zurückgebaut oder umgebaut, solange keine neue Anforderung das verlangt. Verlangt eine neue Funktion eine Änderung, vor der Umsetzung die betroffene Festlegung benennen, die Änderung begründen und Rückfrage halten.
 
-## Testversion (Branch `redesign`)
+## Oberfläche und Arbeitsweise (seit 0.5.0)
 
-Vom Nutzer festgelegt am 2026-11-11: `main` mit Release `v0.4.5` ist die funktionale Version. Auf `redesign` entsteht eine Testversion mit neuem UI/UX und neuen Funktionen, entwickelt auf zwei Macs.
-- Releases nur aus `main`. Aus `redesign` kein Release mit `--latest`, sonst bietet das Selbst-Update der Mac-App die Testversion an; höchstens `--prerelease`.
-- Start der Testversion: `START_TEST.command` (Quellcode, Port 8502, prüft Python 3.11 in `venv/`). Die Mac-App auf Port 8501 kann parallel laufen; Wissensbasis und Vornamenliste der Testversion liegen im Projektordner, getrennt von `~/Library/Application Support/Grauzone PRO`.
-- Zwei Geräte: GitHub ist die gemeinsame Ablage. Vor der Arbeit `git switch redesign` und `git pull`, danach committen und `git push`. Am Sitzungsende `/projekt-uebergabe` ausführen und diese Datei mitpushen; Claude-Memory gilt nur je Gerät. Nicht auf beiden Geräten gleichzeitig dieselbe Datei ändern.
+Vom Nutzer festgelegt am 2026-11-12: Die Testversion der neuen Oberfläche war erfolgreich und ist mit 0.5.0 in `main` aufgegangen. Der Branch `redesign` und `START_TEST.command` (Port 8502) entfallen; gearbeitet wird nur noch auf `main`, auf beiden Macs per `git pull` und `git push`.
+- Releases nur aus `main`, wie in UEBERGABE.md, Abschnitt 4.
 - Pro Gerät, nicht im Repository: `venv/` (per `Grauzone installieren.command`), `knowledge_base.json`, `vornamen.txt`.
-- Korrekturen an `main` (0.4.x) per `git merge main` nach `redesign` übernehmen.
-- Umgesetzt (2026-11-11, nach Bild 1 des ChatGPT-Entwurfs, vom Nutzer gewählt): Kopfzeile in Dunkelblau mit Badge „Testversion“ und ⚙-Popover (Update-Schalter), drei Spalten ohne Seitenleiste: links Hochladen, Analyse (OCR, Scannen), Lernfortschritt, Seitenübersicht mit Vorschaubildern; Mitte Werkzeugleiste (◀ Seite ▶, Zoom −/+, „Alle Seiten“) und Vorschau; rechts Fundstellen als Karten mit Filter (Alle/Personen/Kontakte/Weitere), „Fehlt etwas?“, Export; Statuszeile unten. Stil per CSS in `app.py` (`STIL`) und `[theme]` in `.streamlit/config.toml`; `macos/VERSION` = `0.5.0-test`. Bewusst weggelassen, weil die Funktion fehlt: Konfidenz-Prozente, Smart-Learning, Profile. Prüfprotokoll seit 2026-11-12 umgesetzt: dritter Download „📋 Protokoll“ (Markdown, `E.pruefprotokoll`), mit Dateihash (SHA-256) statt Dateiname, Zahlen je Art (gefunden, geschwärzt, abgewählt), Quelle je Seite, Ergebnis der Exportprüfung; Dateiname `Pruefprotokoll_<Datum>_<Zeit>.md` ohne Dokumentnamen; Tests in `tests/test_export_pruefung.py` und `tests/test_app.py`. Das Markdown des Exports wird nicht gesondert geprüft (nur im Protokoll vermerkt).
-- Ideen des Nutzers (ChatGPT-Entwurf vom 2026-11-11, nicht abgestimmt): Drei-Spalten-Layout, Bearbeiten direkt im Dokument, Regeln mit Geltungsbereich (Dokument, Profil, global) und Rückfrage vor globaler Übernahme, Profile, Undo, Exportprüfung und Prüfprotokoll ohne Originaldaten, heller Stil mit Dunkelblau, Dark Mode optional. Vor der Umsetzung mit dem Nutzer klären, weil sie Festlegungen berühren: PDF.js als eigene Komponente (braucht Node/npm), Presidio und lokales Sprachmodell (Versionskette L2, 8 GB RAM), Tesseract statt EasyOCR (Systemprogramm), SQLite statt `knowledge_base.json`.
+- Aufbau (nach Bild 1 des ChatGPT-Entwurfs, vom Nutzer gewählt): Kopfzeile in Dunkelblau mit Symbol der Mac-App, Beenden-Schaltfläche und ⚙-Popover (Update-Schalter), drei Spalten ohne Seitenleiste: links Hochladen, Analyse (OCR, Scannen), Lernfortschritt, Seitenübersicht mit Vorschaubildern; Mitte Werkzeugleiste (◀ Seite ▶, Zoom −/+, „Alle Seiten“) und Vorschau; rechts Fundstellen als Karten mit Filter (Alle/Personen/Kontakte/Weitere), „Fehlt etwas?“, Export; Statuszeile unten. Stil per CSS in `app.py` (`STIL`) und `[theme]` in `.streamlit/config.toml`. Das Symbol (Browser-Tab und Kopfzeile) steckt als Base64 in `app.py` (`ICON_BASE64`, aus `macos/icon_1024.png`), damit keine zusätzliche Datei in die Mac-App und das Selbst-Update muss.
+- „Beenden“ ersetzt vor dem Beenden des Servers die Browserseite durch eine feste deutsche Seite (Überlagerung per `components.html`); sonst zeigt Streamlit den englischen Dialog „Connection error“.
+- Bewusst weggelassen, weil die Funktion fehlt: Konfidenz-Prozente, Smart-Learning, Profile. Prüfprotokoll seit 2026-11-12 umgesetzt: dritter Download „📋 Protokoll“ (Markdown, `E.pruefprotokoll`), mit Dateihash (SHA-256) statt Dateiname, Zahlen je Art (gefunden, geschwärzt, abgewählt), Quelle je Seite, Ergebnis der Exportprüfung; Dateiname `Pruefprotokoll_<Datum>_<Zeit>.md` ohne Dokumentnamen; Tests in `tests/test_export_pruefung.py` und `tests/test_app.py`. Das Markdown des Exports wird nicht gesondert geprüft (nur im Protokoll vermerkt).
+- Ideen des Nutzers (ChatGPT-Entwurf vom 2026-11-11, nicht abgestimmt): Bearbeiten direkt im Dokument, Regeln mit Geltungsbereich (Dokument, Profil, global) und Rückfrage vor globaler Übernahme, Profile, Undo, Dark Mode optional. Vor der Umsetzung mit dem Nutzer klären, weil sie Festlegungen berühren: PDF.js als eigene Komponente (braucht Node/npm), Presidio und lokales Sprachmodell (Versionskette L2, 8 GB RAM), Tesseract statt EasyOCR (Systemprogramm), SQLite statt `knowledge_base.json`.
 
 ## 1. Kernarchitektur und Tech-Stack
 
@@ -26,8 +25,8 @@ Zweck: Personenbezogene Daten in PDF-Dokumenten vollständig lokal erkennen und 
 Stack: Python 3.11 (Mac-App/Installer über uv), Streamlit, PyMuPDF (`import pymupdf`), EasyOCR, spaCy `>=3.5.0,<3.6.0` mit `de_core_news_lg` (Ersatz `de_core_news_sm`, je 3.5.0), `numpy<2`, Pillow, Faker. Streamlit `>=1.50,<1.68` (getestet: 1.67.0; `width=` geprüft ab 1.50). PyMuPDF `>=2.1,<2.2` ab Python 3.11, sonst `>=1.26.5,<1.27` (beide getestet). EasyOCR ist nicht begrenzt (installiert: 1.7.2).
 
 Struktur:
-- `app.py`: Streamlit-Oberfläche: Hochladen, Scannen (`scanne`, Seite oder alle Seiten), Fundstellenliste, Lernen über `knowledge_base.json`, Export über `E.schwaerze` (auf `redesign` drei Spalten, siehe Abschnitt „Testversion“).
-- `erkennung.py`: Erkennung ohne Streamlit: `woerter_aus_textebene`, `woerter_aus_ocr`, `seitentext`, `finde`, `wort_rechteck`, `markdown` (Export), `oeffne_pdf`, `schwaerze` (physisches Schwärzen, Metadaten löschen; seit Branch `redesign` aus `app.py` hierher verschoben); Datenklassen `Wort`, `Fund`.
+- `app.py`: Streamlit-Oberfläche: Hochladen, Scannen (`scanne`, Seite oder alle Seiten), Fundstellenliste, Lernen über `knowledge_base.json`, Export über `E.schwaerze` (drei Spalten, siehe Abschnitt „Oberfläche und Arbeitsweise“).
+- `erkennung.py`: Erkennung ohne Streamlit: `woerter_aus_textebene`, `woerter_aus_ocr`, `seitentext`, `finde`, `wort_rechteck`, `markdown` (Export), `oeffne_pdf`, `schwaerze` (physisches Schwärzen, Metadaten löschen; seit 0.5.0 aus `app.py` hierher verschoben); Datenklassen `Wort`, `Fund`.
 - `tests/`: Regressionstests mit `unittest` (keine Zusatzbibliothek): `test_erkennung.py` (Muster, Grenzen, Rechtecke, Markdown), `test_schwaerzung.py` (mehrseitiges PDF, Formularfeld, Metadaten, Scan per OCR nur mit `GRAUZONE_OCR_TEST=1`), `test_app.py` (per `AppTest` in leerem Arbeitsordner: Start, Scannen, Blättern, Export, Haken entfernen); `hilfen.py` bildet `scanne` und Export ohne Streamlit nach.
 - `.streamlit/config.toml`: `address = "localhost"`, `headless = true`, `gatherUsageStats = false`.
 - `macos/`: `Grauzone-launcher.sh` (App-Starter), `grauzone-start.sh` (Einrichtung und Start im Datenordner), `grauzone-update.sh` (Selbst-Update), `build_dmg.sh`, `make_icon.py`, `VERSION`.
@@ -71,7 +70,7 @@ Starten und Testen:
 - Einrichtung: `Grauzone installieren.command` doppelklicken, oder `python setup_project.py` in einer Python-3.11-Umgebung.
 - Start: `./venv/bin/python -m streamlit run app.py` (entspricht `START_GRAUZONE.command`).
 - DMG bauen: `sh macos/build_dmg.sh` (Ergebnis in `dist/`).
-- Tests (Branch `redesign`): `./venv/bin/python -m unittest discover -s tests`, mit Scan-Test zusätzlich `GRAUZONE_OCR_TEST=1` (etwa 30 s). Vor jedem Commit ausführen. Weiteres Testvorgehen siehe UEBERGABE.md, Abschnitt 5.
+- Tests: `./venv/bin/python -m unittest discover -s tests`, mit Scan-Test zusätzlich `GRAUZONE_OCR_TEST=1` (etwa 30 s). Vor jedem Commit ausführen. Weiteres Testvorgehen siehe UEBERGABE.md, Abschnitt 5.
 
 ## 2. Die drei wichtigsten Learnings
 
@@ -102,7 +101,7 @@ Starten und Testen:
 | Absender und Anschrift als eine Fundstelle | spaCy-Entitäten über Zeilenumbrüche | Aufteilen an `\n` (`erkennung.py:162`) | Entitäten ungeteilt übernehmen |
 | Buchstabenreste neben Balken bei Scans | OCR-Wortgrenzen ungenau | Zusätzlicher Rand für OCR-Wörter, `width_ths=0.05` (`erkennung.py:71`, `:238`) | Rand für OCR-Wörter auf Textebenen-Niveau senken |
 | Auswahl auf anderer Seite verloren | Streamlit löscht Zustand verborgener Widgets | `st.session_state.auswahl` (`app.py:239`) | Auswahl nur über Checkbox-Keys halten |
-| Haken entfernt, aber Vorschau, Zähler und Karte blieben rot (Testversion) | Rechte Spalte (Liste) läuft nach der Vorschau; Auswahl kam zu spät in `st.session_state.auswahl` | Haken vor dem Zeichnen aus den Checkbox-Keys übernehmen (`haken_key`, `app.py`), Export verwerfen; Test `test_haken_entfernen_wirkt_sofort` | Auswahl erst beim Zeichnen der Liste übernehmen, wenn die Liste nach der Vorschau steht |
+| Haken entfernt, aber Vorschau, Zähler und Karte blieben rot (0.5.0) | Rechte Spalte (Liste) läuft nach der Vorschau; Auswahl kam zu spät in `st.session_state.auswahl` | Haken vor dem Zeichnen aus den Checkbox-Keys übernehmen (`haken_key`, `app.py`), Export verwerfen; Test `test_haken_entfernen_wirkt_sofort` | Auswahl erst beim Zeichnen der Liste übernehmen, wenn die Liste nach der Vorschau steht |
 | Tests schrieben in die echte `knowledge_base.json` | Abwählen lernt „nie schwärzen“, App liest relativ zum Arbeitsordner | `tests/test_app.py` startet in `tempfile.mkdtemp()` | App-Tests im Projektordner laufen lassen |
 | ◀ ▶ und Seitenzahl wechselten nur die Fundstellen-Liste, die Vorschau blieb stehen; Scrollbereich höher als das Fenster | Streamlit scrollt nicht selbst; `st.container(height=900)` fest | `zur_seite_scrollen` und CSS-Höhe in `app.py` (0.4.5) | Feste Container-Höhe über Fensterhöhe; CSS nur auf den Container statt auf seinen Wrapper (`flex: 0 0 800px` gewinnt) |
 | Quarantäne-Attribut auf kopierten Dateien der Mac-App | Kopieren aus dem App-Bundle | Kopieren per `cat` in `macos/Grauzone-launcher.sh` | `cp` für diese Kopie verwenden |
@@ -121,7 +120,7 @@ Verworfene Ansätze:
 
 ## 4. Offene Aufgaben
 
-- [ ] Testversion auf `redesign` (siehe Abschnitt „Testversion“): Tests und Drei-Spalten-Layout vorhanden; als Nächstes Rückmeldung des Nutzers zum Layout, dann weitere Funktionen schrittweise (Priorität hoch)
+- [ ] Release 0.5.0 (enthält 0.4.7; ein Release 0.4.7 entfällt, wenn 0.5.0 direkt folgt) mit allen vier Anhängen auf dem Mac bauen und veröffentlichen; danach Selbst-Update prüfen und Aufräumen auf den Macs (Priorität hoch)
 - [ ] `st.components.v1.html` (Scroll-Sprung in `zur_seite_scrollen`, auch in 0.4.5) ist ab Streamlit 1.68 abgekündigt, Ersatz `st.iframe`; vor Anheben der Grenze `<1.68` umstellen und Sprung im Browser prüfen (mittel)
 - [ ] Datumsprüfung `_ist_datum` in `finde` ist beim jetzigen TEL-Muster wirkungslos (kein Datum passt auf das Muster); bei Änderungen am TEL-Muster Test `test_datum_ist_keine_telefonnummer` beachten (niedrig)
 - [ ] Selbst-Update auf 0.4.5 beim Nutzer echt prüfen (Nutzer lief am 2026-11-11 noch mit 0.4.3) (hoch)
@@ -143,11 +142,9 @@ Verworfene Ansätze:
 
 ### Nächster konkreter Schritt
 
-Rückmeldung des Nutzers zum neuen Layout einholen (`START_TEST.command`, Port 8502) und einarbeiten. Danach die nächste Funktion aus dem Entwurf mit dem Nutzer wählen (Vorschlag: Fundstellen direkt in der Vorschau anklicken, oder Rückgängig). Prüfen: `./venv/bin/python -m unittest discover -s tests` ohne Fehler; im Browser mit erfundenem mehrseitigem PDF scannen, Haken entfernen (Karte und Vorschau grau), exportieren.
-
-Stand 2026-11-12: Erkennungskorrekturen (0.4.6) und Exportprüfung samt „Beenden“ (0.4.7) von `main` übernommen; „Beenden“ steht in der Kopfzeile neben dem ⚙-Menü.
+Stand 2026-11-12: Testversion erfolgreich, 0.5.0 auf `main` vorbereitet (Symbol, „Beenden“ ohne englischen Dialog, Badge „Testversion“ entfernt). Als Nächstes: Release 0.5.0 auf dem Mac (Ablauf UEBERGABE.md, Abschnitt 4), danach Selbst-Update prüfen und überflüssige Dateien auf den Macs löschen. Danach: Test mit echten mehrseitigen Dokumenten (Text und Scan gemischt, Formulare, Tempo der Vorschau), dann die nächste Funktion aus dem Entwurf mit dem Nutzer wählen (Vorschlag: Fundstellen direkt in der Vorschau anklicken, oder Rückgängig). Prüfen vor jedem Commit: `./venv/bin/python -m unittest discover -s tests`.
 
 ## Ungeprüft
 
-- Die lokalen Umgebungen `venv/` (Python 3.9.6, spaCy 3.8.2, numpy 2.0.2, Modelle 3.8.0) und `.venv/` (Python 3.9.6, spaCy 3.5.4, numpy 2.0.2) widersprechen `requirements.txt`. Ob sie noch gebraucht werden, ist offen; `Grauzone installieren.command` würde `venv/` mit Python 3.11 neu anlegen. `.venv/` steht seit dem Branch `redesign` in `.gitignore`.
+- Die lokalen Umgebungen `venv/` (Python 3.9.6, spaCy 3.8.2, numpy 2.0.2, Modelle 3.8.0) und `.venv/` (Python 3.9.6, spaCy 3.5.4, numpy 2.0.2) widersprechen `requirements.txt`. Ob sie noch gebraucht werden, ist offen; `Grauzone installieren.command` würde `venv/` mit Python 3.11 neu anlegen. `.venv/` steht in `.gitignore`.
 - Herkunft und Zweck von `trainingsdaten/` und `dist/run_app.app` (vom 11.05.2026) sind nicht geklärt.

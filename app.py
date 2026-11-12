@@ -1,3 +1,4 @@
+import base64
 import io
 import json
 import os
@@ -30,7 +31,11 @@ VERSION = lies_version()
 TITEL = f"Grauzone PRO {VERSION}".strip()
 
 # --- 1. KONFIGURATION & MODELLE ---
-st.set_page_config(page_title=TITEL, layout="wide")
+# Symbol der Mac-App (macos/icon_1024.png), auf 64 Pixel verkleinert und eingebettet,
+# damit es ohne zusätzliche Datei im Datenordner der Mac-App zur Verfügung steht.
+ICON_BASE64 = "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"
+st.set_page_config(page_title=TITEL, page_icon=Image.open(io.BytesIO(base64.b64decode(ICON_BASE64))),
+                   layout="wide")
 
 
 @st.cache_resource
@@ -197,14 +202,13 @@ header[data-testid="stHeader"] { display:none; }
 .st-key-kopfzeile { background:var(--gz-navy); margin:-1rem -1.2rem .8rem -1.2rem; padding:.55rem 1.4rem; }
 .st-key-kopfzeile [data-testid="stPopover"] button { background:transparent; color:#fff; border-color:#2a4f80; }
 .gz-kopf { color:#fff; display:flex; align-items:center; gap:1rem; }
-.gz-logo { font-size:1.6rem; line-height:1; }
+.gz-logo { height:2.2rem; width:2.2rem; border-radius:0.5rem; }
 .gz-name { font-size:1.35rem; font-weight:700; letter-spacing:.2px; }
 .gz-name b { color:#7dd3fc; font-weight:700; }
 .gz-claim { color:#cbd5e1; font-size:.9rem; border-left:1px solid #334e73; padding-left:1rem; }
 .gz-rechts { margin-left:auto; display:flex; gap:.6rem; align-items:center; font-size:.85rem; }
 .gz-badge { background:#16365f; border:1px solid #2a4f80; border-radius:999px; padding:.15rem .7rem; }
 .gz-badge .punkt { color:#4ade80; }
-.gz-test { background:#b45309; border-color:#d97706; }
 /* Karten */
 [class*="st-key-karte"] { background:#fff; border:1px solid var(--gz-rand) !important;
     border-radius:12px; box-shadow:0 1px 2px rgba(16,24,40,.05); }
@@ -235,21 +239,32 @@ header[data-testid="stHeader"] { display:none; }
 </style>"""
 st.markdown(STIL, unsafe_allow_html=True)
 
+SEITE_BEENDET = (
+    "<div style='max-width:34rem;margin:18vh auto;padding:0 1.5rem;font-family:-apple-system,Helvetica,Arial,sans-serif;"
+    "color:#101828'>"
+    f"<img src='data:image/png;base64,{ICON_BASE64}' alt='' style='height:3.5rem;border-radius:0.8rem'>"
+    "<h1 style='font-size:1.5rem;margin:1rem 0 0.5rem'>Grauzone wurde beendet</h1>"
+    "<p style='line-height:1.5'>Dieses Browserfenster und das Terminalfenster „Grauzone PRO“ können geschlossen "
+    "werden. Zum erneuten Start Grauzone PRO neu öffnen.</p></div>")
+
 kopfzeile = st.container(key="kopfzeile")
 kopf_l, kopf_b, kopf_r = kopfzeile.columns([11, 1.6, 1], vertical_alignment="center")
 kopf_l.markdown(
-    f"""<div class="gz-kopf"><span class="gz-logo">🛡️</span>
+    f"""<div class="gz-kopf"><img class="gz-logo" alt="" src="data:image/png;base64,{ICON_BASE64}">
     <span class="gz-name">Grauzone <b>PRO</b></span>
     <span class="gz-claim">Personenbezogene Daten erkennen. Sicher schwärzen.</span>
-    <span class="gz-rechts"><span class="gz-badge gz-test">Testversion</span>
-    <span class="gz-badge"><span class="punkt">●</span> Lokal · v{VERSION}</span></span></div>""",
+    <span class="gz-rechts"><span class="gz-badge"><span class="punkt">●</span> Lokal · v{VERSION}</span></span></div>""",
     unsafe_allow_html=True)
 if kopf_b.button("⏻ Beenden", width="stretch",
                  help="Beendet Grauzone. Nicht heruntergeladene Ergebnisse gehen verloren."):
-    # Erst die Meldung ausliefern, dann den Server kurz verzögert beenden
-    threading.Timer(1.0, lambda: os.kill(os.getpid(), signal.SIGTERM)).start()
-    st.info("**Grauzone wurde beendet.** Dieses Browserfenster und das Terminalfenster "
-            "„Grauzone PRO“ können geschlossen werden. Zum erneuten Start Grauzone PRO neu öffnen.")
+    # Die Browserseite durch eine feste deutsche Seite ersetzen, bevor der Server endet;
+    # sonst zeigt Streamlit den englischen Dialog „Connection error“.
+    components.html(
+        "<script>const d = window.parent.document; const o = d.createElement('div');"
+        "o.style.cssText = 'position:fixed;inset:0;z-index:2147483647;background:#f4f6fa;overflow:auto';"
+        "o.innerHTML = " + json.dumps(SEITE_BEENDET) + "; d.body.appendChild(o);</script>",
+        height=0)
+    threading.Timer(2.5, lambda: os.kill(os.getpid(), signal.SIGTERM)).start()
     st.stop()
 with kopf_r.popover("⚙️", help="Einstellungen", width="stretch"):
     st.markdown("**Einstellungen**")

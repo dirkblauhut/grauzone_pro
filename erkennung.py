@@ -483,3 +483,61 @@ def pruefe_export(daten: bytes, rechtecke: dict[int, list[tuple[float, float, fl
     finally:
         doc.close()
     return meldungen
+
+
+# --- 6. Prüfprotokoll -----------------------------------------------------------
+
+def pruefprotokoll(*, version: str, modell: str, zeitpunkt: str, original: bytes, export: bytes,
+                   seiten_gesamt: int, quellen: dict[int, str], funde: dict[int, list],
+                   gewaehlt, balken: int, meldungen: list[str]) -> str:
+    """Prüfprotokoll als Markdown, ohne Originaldaten (kein Dateiname, kein Text der Fundstellen).
+
+    quellen:  Seitenindex -> "Textebene" oder "Texterkennung" (nur gescannte Seiten)
+    funde:    Seitenindex -> Liste von Fund (nur gescannte Seiten)
+    gewaehlt: Funktion (Seitenindex, Fund) -> bool
+    meldungen: Ergebnis von pruefe_export (leer = bestanden)
+    """
+    import hashlib
+    gescannt = sorted(quellen)
+    offen = [p + 1 for p in range(seiten_gesamt) if p not in quellen]
+    je_art: dict[str, list[int]] = {}
+    for p in gescannt:
+        for f in funde.get(p, []):
+            z = je_art.setdefault(f.art, [0, 0])
+            z[0] += 1
+            z[1] += 1 if gewaehlt(p, f) else 0
+    summe = [sum(z[0] for z in je_art.values()), sum(z[1] for z in je_art.values())]
+    nach_quelle: dict[str, list[int]] = {}
+    for p in gescannt:
+        nach_quelle.setdefault(quellen[p], []).append(p + 1)
+
+    z = ["# Prüfprotokoll Grauzone PRO", "",
+         f"Erstellt am {zeitpunkt} mit Grauzone PRO {version}, Erkennungsmodell {modell}.", "",
+         "Dieses Protokoll enthält keine Originaldaten: weder Dateiname noch Text der Fundstellen.", "",
+         "## Dokument", "",
+         f"- Kennung des Originals (SHA-256): `{hashlib.sha256(original).hexdigest()}`",
+         f"- Kennung des geschwärzten PDF (SHA-256): `{hashlib.sha256(export).hexdigest()}`",
+         f"- Seiten gesamt: {seiten_gesamt}, gescannt und bearbeitet: {len(gescannt)}"]
+    for q, liste in nach_quelle.items():
+        z.append(f"- Gelesen per {q}: Seite {', '.join(map(str, liste))}")
+    if offen:
+        z.append(f"- **Nicht gescannt und daher nicht geschwärzt: Seite {', '.join(map(str, offen))}**")
+    z += ["", "## Fundstellen", "", "| Art | Gefunden | Geschwärzt | Abgewählt |", "|---|---:|---:|---:|"]
+    for art in sorted(je_art):
+        g, s = je_art[art]
+        z.append(f"| {ARTEN.get(art, art)} | {g} | {s} | {g - s} |")
+    z.append(f"| **Summe** | **{summe[0]}** | **{summe[1]}** | **{summe[0] - summe[1]}** |")
+    z += ["", f"Abgewählt heißt: von der prüfenden Person nicht zur Schwärzung ausgewählt "
+              f"({summe[0] - summe[1]} Stelle(n)). Geschwärzte Balken im PDF: {balken}.", "",
+          "## Exportprüfung", ""]
+    if meldungen:
+        z += ["Ergebnis: **nicht bestanden**", ""] + [f"- {m}" for m in meldungen]
+    else:
+        z.append("Ergebnis: **bestanden**")
+    z += ["", "Geprüft am fertigen PDF: Text und Helligkeit unter jedem Balken, Dokumenteigenschaften, "
+              "XMP-Metadaten, Lesezeichen, eingebettete Dateien, Anmerkungen, Formularfelder. "
+              "Das Markdown wird aus denselben Fundstellen erzeugt und nicht gesondert geprüft.", "",
+          "## Hinweise", "",
+          "- Die automatische Erkennung ist nicht vollständig. Das Ergebnis ersetzt keine Prüfung durch eine Person.",
+          "- Dieses Protokoll begründet keine Revisionssicherheit und keine rechtliche Bewertung.", ""]
+    return "\n".join(z)

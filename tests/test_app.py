@@ -77,6 +77,16 @@ class AppDurchlauf(unittest.TestCase):
         self.assertNotIn("Mustermann", text)
         self.assertIn("Sehr geehrte Frau", text)
 
+    def test_protokoll_ohne_originaldaten(self):
+        at = self.at
+        knopf(at, "Schwärzen & exportieren").click().run()
+        self.assertEqual([], [str(e.value) for e in at.exception])
+        protokoll = at.session_state.export[5]
+        self.assertIn("Ergebnis: **bestanden**", protokoll)
+        self.assertIn("SHA-256", protokoll)
+        for verboten in ("Mustermann", "probe", "Musterstadt", "0221"):
+            self.assertNotIn(verboten, protokoll)
+
     def test_haken_entfernen_wirkt_sofort(self):
         # Behoben (Testversion): Vorschau und Zähler wurden vor der Liste gezeichnet
         # und zeigten die alte Auswahl

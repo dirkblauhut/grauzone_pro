@@ -81,5 +81,37 @@ class ExportPruefung(unittest.TestCase):
         self.assertNotIn("Mustermann", meldungen)
 
 
+class Pruefprotokoll(unittest.TestCase):
+    def protokoll(self, meldungen=(), gewaehlt=lambda p, f: True):
+        funde = {0: [E.Fund("Erika Mustermann", "PER"), E.Fund("0221 123456", "TEL")],
+                 1: [E.Fund("Erika Mustermann", "PER")]}
+        return E.pruefprotokoll(
+            version="0.0.0-test", modell="core_news_test", zeitpunkt="01.01.2026 12:00",
+            original=b"original", export=b"export", seiten_gesamt=3,
+            quellen={0: "Textebene", 1: "Texterkennung"}, funde=funde, gewaehlt=gewaehlt,
+            balken=3, meldungen=list(meldungen))
+
+    def test_zahlen_und_kennungen(self):
+        text = self.protokoll(gewaehlt=lambda p, f: f.art != "TEL")
+        self.assertIn("| Person | 2 | 2 | 0 |", text)
+        self.assertIn("| Telefon | 1 | 0 | 1 |", text)
+        self.assertIn("| **Summe** | **3** | **2** | **1** |", text)
+        import hashlib
+        self.assertIn(hashlib.sha256(b"original").hexdigest(), text)
+        self.assertIn(hashlib.sha256(b"export").hexdigest(), text)
+        self.assertIn("Nicht gescannt und daher nicht geschwärzt: Seite 3", text)
+        self.assertIn("Ergebnis: **bestanden**", text)
+
+    def test_kein_originaltext(self):
+        text = self.protokoll()
+        for verboten in ("Mustermann", "0221", "123456"):
+            self.assertNotIn(verboten, text)
+
+    def test_meldungen_stehen_im_protokoll(self):
+        text = self.protokoll(meldungen=["XMP-Metadaten nicht leer."])
+        self.assertIn("nicht bestanden", text)
+        self.assertIn("XMP-Metadaten nicht leer.", text)
+
+
 if __name__ == "__main__":
     unittest.main()

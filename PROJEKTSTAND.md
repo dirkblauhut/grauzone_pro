@@ -121,7 +121,7 @@ Verworfene Ansätze:
 
 ## 4. Offene Aufgaben
 
-- [ ] Selbst-Update von 0.5.0 auf 0.5.1 auf einem Mac mit installierter App prüfen; Branch `redesign` auf GitHub löschen (`git push origin --delete redesign`, aus der Cloud-Sitzung nicht möglich); Aufräumen auf den Macs (Priorität hoch)
+- [ ] Selbst-Update von 0.5.0 auf 0.5.1 auf einem Mac mit installierter App prüfen; Aufräumen auf den Macs (Priorität hoch). Geprüft 2026-11-12: Release v0.5.1 vollständig (DMG, `grauzone-update.tar.gz`, `SHA256SUMS`, `VERSION` = 0.5.1, Prüfsumme stimmt), Tag `v0.5.1` auf GitHub (zeigt auf 64e4a1d). Branch `redesign` auf GitHub war schon gelöscht, lokal auf diesem Mac gelöscht; auf dem zweiten Mac `git branch -d redesign` ausführen. Auf GitHub liegt noch `claude/laughing-lamport-dda70o` (Cloud-Sitzung, Inhalt ungeprüft).
 - [ ] `st.components.v1.html` (Scroll-Sprung in `zur_seite_scrollen`, auch in 0.4.5) ist ab Streamlit 1.68 abgekündigt, Ersatz `st.iframe`; vor Anheben der Grenze `<1.68` umstellen und Sprung im Browser prüfen (mittel)
 - [ ] Datumsprüfung `_ist_datum` in `finde` ist beim jetzigen TEL-Muster wirkungslos (kein Datum passt auf das Muster); bei Änderungen am TEL-Muster Test `test_datum_ist_keine_telefonnummer` beachten (niedrig)
 - [ ] EasyOCR ist nicht nach oben begrenzt (installiert 1.7.2) (niedrig)
@@ -140,7 +140,7 @@ Verworfene Ansätze:
 
 ### Nächster konkreter Schritt
 
-Stand 2026-11-12: 0.5.0 und 0.5.1 veröffentlicht. Als Nächstes: Selbst-Update prüfen, Branch `redesign` löschen, überflüssige Dateien auf den Macs löschen. Hinweis: Tags, Branch-Löschen und Release anlegen scheitern aus der Cloud-Sitzung (Verbindungsabbruch, DMG braucht macOS); das läuft auf dem Mac. Danach: Test mit echten mehrseitigen Dokumenten (Text und Scan gemischt, Formulare, Tempo der Vorschau), dann die nächste Funktion aus dem Entwurf mit dem Nutzer wählen (Vorschlag: Fundstellen direkt in der Vorschau anklicken, oder Rückgängig). Prüfen vor jedem Commit: `./venv/bin/python -m unittest discover -s tests`.
+Stand 2026-11-12: 0.5.0 und 0.5.1 veröffentlicht, Release v0.5.1 geprüft, Branch `redesign` gelöscht. Als Nächstes: Selbst-Update prüfen (am Mac durch den Nutzer), überflüssige Dateien auf den Macs löschen. Hinweis: Tags, Branch-Löschen und Release anlegen scheitern aus der Cloud-Sitzung (Verbindungsabbruch, DMG braucht macOS); das läuft auf dem Mac. Vorschlag für 0.5.2: Dateiname des Exports ohne Originalnamen, EasyOCR nach oben begrenzen. Danach: Test mit echten mehrseitigen Dokumenten (Text und Scan gemischt, Formulare, Tempo der Vorschau), dann die nächste Funktion aus dem Entwurf mit dem Nutzer wählen (Vorschlag: Fundstellen direkt in der Vorschau anklicken, oder Rückgängig). Prüfen vor jedem Commit: `./venv/bin/python -m unittest discover -s tests`.
 
 ## Ungeprüft
 

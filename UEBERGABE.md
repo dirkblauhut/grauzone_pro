@@ -102,3 +102,4 @@ Die App ist nur ad hoc signiert, nicht notarisiert. macOS fragt beim ersten Öff
 | 0.4.7 | 12.11.2026 | Export entfernt zusätzlich XMP-Metadaten, Lesezeichen und eingebettete Dateien, prüft das fertige PDF (Text und Helligkeit unter den Balken, Metadaten, Anmerkungen, Formularfelder); Schaltfläche „Beenden“ |
 | 0.5.0 | 12.11.2026 | Neue Oberfläche in drei Spalten mit Kopfzeile, Fundstellenkarten und Filter, Seitenübersicht, Prüfprotokoll als Markdown-Download ohne Originaldaten, Symbol der App im Browser, „Beenden“ ohne Fehlerdialog; Regressionstests |
 | 0.5.1 | 12.11.2026 | Fundstellenliste erscheint nach dem Scannen sofort, nicht erst nach dem Zeichnen aller Vorschauseiten |
+| 0.5.2 | 12.11.2026 | Dateinamen des Exports ohne Namen des Originaldokuments (`<Datum>_<Uhrzeit>_Anonymisiert.pdf`/`.md`, `…_Pruefprotokoll.md`); EasyOCR auf 1.7.x begrenzt |

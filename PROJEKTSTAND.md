@@ -1,6 +1,6 @@
 # Projektstand: Grauzone PRO
 
-Stand: 2026-11-12, Branch main, Version 0.5.1 (0.5.0 und 0.5.1 vom Nutzer veröffentlicht)
+Stand: 2026-11-12, Branch main, Version 0.5.2 (0.5.0 und 0.5.1 vom Nutzer veröffentlicht, 0.5.2 aus der lokalen Sitzung auf dem Mac)
 
 Ergänzt [UEBERGABE.md](UEBERGABE.md). Dort stehen Dateiübersicht, Funktionsweise der Mac-App, Release-Ablauf (Abschnitt 4) und Testanleitung (Abschnitt 5). Diese Datei hält Festlegungen, Learnings und Sackgassen fest und wird nicht mit UEBERGABE.md zusammengeführt.
 
@@ -138,7 +138,7 @@ Verworfene Ansätze:
 
 ### Nächster konkreter Schritt
 
-Stand 2026-11-12: 0.5.0 und 0.5.1 veröffentlicht, Release v0.5.1 geprüft, Branch `redesign` gelöscht. Als Nächstes: Selbst-Update prüfen (am Mac durch den Nutzer), überflüssige Dateien auf den Macs löschen. Hinweis: Tags, Branch-Löschen und Release anlegen scheitern aus der Cloud-Sitzung (Verbindungsabbruch, DMG braucht macOS); das läuft auf dem Mac. 0.5.2 bereit zur Veröffentlichung (Dateiname des Exports ohne Originalnamen, EasyOCR begrenzt); `macos/VERSION` noch auf 0.5.1, Release nach UEBERGABE.md, Abschnitt 4. Die geänderte `requirements.txt` löst beim ersten Start nach dem Update eine erneute Einrichtung der Bibliotheken aus. Danach: Test mit echten mehrseitigen Dokumenten (Text und Scan gemischt, Formulare, Tempo der Vorschau), dann die nächste Funktion aus dem Entwurf mit dem Nutzer wählen (Vorschlag: Fundstellen direkt in der Vorschau anklicken, oder Rückgängig). Prüfen vor jedem Commit: `./venv/bin/python -m unittest discover -s tests`.
+Stand 2026-11-12: 0.5.0 und 0.5.1 veröffentlicht, Release v0.5.1 geprüft, Branch `redesign` gelöscht. Als Nächstes: Selbst-Update prüfen (am Mac durch den Nutzer, jetzt auf 0.5.2), überflüssige Dateien auf den Macs löschen. Hinweis: Tags, Branch-Löschen und Release anlegen scheitern aus der Cloud-Sitzung (Verbindungsabbruch, DMG braucht macOS); das läuft auf dem Mac. 0.5.2 veröffentlicht (Dateiname des Exports ohne Originalnamen, EasyOCR begrenzt). Die geänderte `requirements.txt` löst beim ersten Start nach dem Update eine erneute Einrichtung der Bibliotheken aus. Danach: Test mit echten mehrseitigen Dokumenten (Text und Scan gemischt, Formulare, Tempo der Vorschau), dann die nächste Funktion aus dem Entwurf mit dem Nutzer wählen (Vorschlag: Fundstellen direkt in der Vorschau anklicken, oder Rückgängig). Prüfen vor jedem Commit: `./venv/bin/python -m unittest discover -s tests`.
 
 ## Ungeprüft
 

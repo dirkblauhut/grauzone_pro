@@ -128,10 +128,13 @@ GROSS = r"[A-ZÄÖÜ][a-zäöüß]+(?:-[A-ZÄÖÜ][a-zäöüß]+)?"
 MUSTER = [
     # Anrede + Name: "Frau Erika Mustermann", "Herrn Dr. Thomas Beispiel"
     ("PER", re.compile(rf"\b(?:Herrn?|Frau|Fr\.|Hr\.)\s+(?:(?:Dr|Prof)\.\s+)*((?:{GROSS})(?:[ \t]+{GROSS}){{0,2}})")),
+    # Name über Zeilenumbruch: "Herrn Max⏎Beispiel" (Folgewort wird in finde geprüft)
+    ("PER_UMBRUCH", re.compile(rf"\b(?:Herrn?|Frau|Fr\.|Hr\.)[ \t]+(?:(?:Dr|Prof)\.[ \t]+)*(?:{GROSS})[ \t]*\n[ \t]*({GROSS})")),
     # Telefon/Fax: beginnt mit 0 oder +, mind. 6 Ziffern, keine Datumsangabe
     ("TEL", re.compile(r"(?<![\w.])(?:\+\d{1,3}[ \t]?(?:\(0\))?[ \t]?|0)\d{2,5}(?:[ \t/\-]?\d{2,}){1,4}(?![\w.])")),
     ("MAIL", re.compile(r"\b[\w.+-]+@[\w-]+(?:\.[\w-]+)+\b")),
-    ("IBAN", re.compile(r"\b[A-Z]{2}\d{2}(?:[ \t]?[A-Z0-9]{4}){3,7}(?:[ \t]?[A-Z0-9]{1,4})?\b")),
+    # IBAN, auch mit typischen OCR-Verwechslungen (O/o statt 0, I/l statt 1); Prüfung in finde
+    ("IBAN", re.compile(r"\b[A-Z]{2}[\dOo]{2}(?:[ \t]?[A-Za-z0-9]{4}){3,7}(?:[ \t]?[A-Za-z0-9]{1,4})?\b")),
     # Postleitzahl + Ort
     ("ADR", re.compile(rf"\b\d{{5}}[ \t]+{GROSS}(?:[ \t\-]{GROSS})?")),
     # Straße + Hausnummer
@@ -141,11 +144,29 @@ MUSTER = [
         r"|\b(?:Am|An der|Auf dem|Im|In der|Zum|Zur)[ \t]+[A-ZÄÖÜ][\wäöüß\-]+[ \t]+\d+[ \t]?[a-zA-Z]?\b")),
 ]
 SPACY_ARTEN = {"PER": "PER", "LOC": "ORT", "ORG": "ORG"}
+# Großgeschriebene Wörter, die am Zeilenanfang folgen können und keine Namen sind
+NICHT_NAME = {
+    "Ihr", "Ihre", "Ihren", "Ihrem", "Ihrer", "Ihres", "Sie", "Der", "Die", "Das", "Den", "Dem",
+    "Des", "Ein", "Eine", "Einen", "Mit", "Und", "Oder", "Bei", "Von", "Vom", "Zu", "Zum", "Zur",
+    "Für", "Auf", "Aus", "Nach", "Wir", "Er", "Es", "Im", "In", "Am", "An", "Betreff", "Datum",
+    "Telefon", "Fax", "Mail", "Tel", "Az", "Aktenzeichen", "Anlage", "Anlagen", "Hinweis",
+}
+_OCR_ZIFFER = str.maketrans({"O": "0", "o": "0", "I": "1", "l": "1", "S": "5", "B": "8", "Z": "2"})
 ANREDE = re.compile(r"(?:(?:Herrn?|Frau|Fr\.|Hr\.|Dr\.|Prof\.)[ \t]+)+")
 
 
 def _ist_datum(s: str) -> bool:
     return bool(re.fullmatch(r"\d{1,2}[./]\d{1,2}[./]\d{2,4}", s.strip()))
+
+
+rx_mail = re.compile(r"[\w.+-]+@[\w-]+(?:\.[\w-]+)+")
+
+
+def _ist_iban(s: str) -> bool:
+    """Prüft nach Ersatz typischer OCR-Verwechslungen, ob es wie eine IBAN aussieht."""
+    z = re.sub(r"\s+", "", s)
+    n = z[:2] + z[2:].translate(_OCR_ZIFFER)
+    return len(n) >= 15 and sum(c.isdigit() for c in n) >= 12 and n[2:4].isdigit()
 
 
 def finde(text: str, woerter: list[Wort], nlp, vornamen: set[str], gelernt: list[str]) -> list[Fund]:
@@ -167,9 +188,26 @@ def finde(text: str, woerter: list[Wort], nlp, vornamen: set[str], gelernt: list
         for m in rx.finditer(text):
             gruppe = 1 if m.lastindex else 0
             s, e = m.span(gruppe)
+            if art == "PER_UMBRUCH":
+                if m.group(1) in NICHT_NAME:
+                    continue
+                art = "PER"
+            if art == "IBAN" and not _ist_iban(m.group(0)):
+                continue
             if art == "TEL" and (_ist_datum(m.group(0)) or sum(c.isdigit() for c in m.group(0)) < 6):
                 continue
             spans.append((s, e, art))
+
+    # E-Mail-Adressen nach Texterkennung: Wort mit "@" immer ganz erfassen; fehlt der
+    # Punkt vor der Endung ("example org"), die Endung als Folgewort anhängen
+    for i, w in enumerate(woerter):
+        if "@" in w.text and not rx_mail.fullmatch(w.text.strip(".,;:")):
+            ende = w.ende
+            if "." not in w.text.split("@", 1)[1].strip(".,;:") and i + 1 < len(woerter) \
+                    and re.fullmatch(r"[a-z]{2,4}[.,;:]?", woerter[i + 1].text) \
+                    and text[w.ende:woerter[i + 1].start].strip() == "":
+                ende = woerter[i + 1].ende
+            spans.append((w.start, ende, "MAIL"))
 
     # Vornamenliste: Vorname + folgendes großgeschriebenes Wort
     for i, w in enumerate(woerter):

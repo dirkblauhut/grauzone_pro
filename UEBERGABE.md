@@ -103,3 +103,4 @@ Die App ist nur ad hoc signiert, nicht notarisiert. macOS fragt beim ersten Öff
 | 0.5.0 | 12.11.2026 | Neue Oberfläche in drei Spalten mit Kopfzeile, Fundstellenkarten und Filter, Seitenübersicht, Prüfprotokoll als Markdown-Download ohne Originaldaten, Symbol der App im Browser, „Beenden“ ohne Fehlerdialog; Regressionstests |
 | 0.5.1 | 12.11.2026 | Fundstellenliste erscheint nach dem Scannen sofort, nicht erst nach dem Zeichnen aller Vorschauseiten |
 | 0.5.2 | 12.11.2026 | Dateinamen des Exports ohne Namen des Originaldokuments (`<Datum>_<Uhrzeit>_Anonymisiert.pdf`/`.md`, `…_Pruefprotokoll.md`); EasyOCR auf 1.7.x begrenzt |
+| 0.6.0 | 12.11.2026 | Begründung je Fundstelle, Prüfwarteschlange (zu prüfen vor eindeutig), IBAN-Prüfziffer, Suche, „Alle schwärzen/freigeben“ ohne Lernen, Ansicht Original/Ergebnis/Beide, gleiche Angaben gemeinsam entscheiden, Rückgängig/Wiederholen, Export einzelner Seiten |

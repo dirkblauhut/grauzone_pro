@@ -90,7 +90,8 @@ def in_liste(text, liste):
 
 
 # --- 3. SESSION STATE ---
-for key, start in [("last_uploaded_file", None), ("woerter", {}), ("auswahl", {}), ("export", None)]:
+for key, start in [("last_uploaded_file", None), ("woerter", {}), ("auswahl", {}), ("export", None),
+                   ("verlauf", []), ("wiederholen", []), ("gemeinsam", True)]:
     if key not in st.session_state:
         st.session_state[key] = start
 if 'kb' not in st.session_state:
@@ -361,6 +362,8 @@ if uploaded_file is not None and uploaded_file.name != st.session_state.last_upl
     st.session_state.seite = 1
     st.session_state.gezeigt = None
     st.session_state.ergebnis = None
+    st.session_state.verlauf = []
+    st.session_state.wiederholen = []
     st.rerun()
 
 if not uploaded_file:
@@ -397,24 +400,94 @@ def haken_key(p, i, fund):
     return f"cb_{uploaded_file.name}_{p}_{i}_{fund.text}"
 
 
+def gleich(text):
+    """Vergleichsform einer Angabe: Groß-/Kleinschreibung und Leerraum egal."""
+    return " ".join(text.lower().split())
+
+
+def vorkommen():
+    """Angabe (Vergleichsform) -> Seiten, auf denen sie als Fundstelle steht."""
+    seiten = {}
+    for p in sorted(st.session_state.woerter):
+        for f in funde_der_seite(p):
+            seiten.setdefault(gleich(f.text), [])
+            if p not in seiten[gleich(f.text)]:
+                seiten[gleich(f.text)].append(p)
+    return seiten
+
+
+def haken_zuruecksetzen(ausser=None):
+    """Checkbox-Schlüssel löschen; die Checkboxen übernehmen beim nächsten Zeichnen
+    den Wert aus auswahl (sonst überschriebe ein alter Haken die neue Auswahl)."""
+    for k in [k for k in st.session_state if isinstance(k, str) and k.startswith("cb_") and k != ausser]:
+        del st.session_state[k]
+
+
+# --- Rückgängig/Wiederholen: Zustand = Auswahl und Wissensbasis ---
+
+def zustand(beschreibung):
+    wissen = st.session_state.kb
+    return (beschreibung, dict(st.session_state.auswahl),
+            {"whitelist": list(wissen["whitelist"]), "blacklist": list(wissen["blacklist"])})
+
+
+def merke(beschreibung):
+    """Vor jeder Änderung aufrufen; höchstens 50 Schritte."""
+    st.session_state.verlauf = (st.session_state.verlauf + [zustand(beschreibung)])[-50:]
+    st.session_state.wiederholen = []
+
+
+def stelle_her(eintrag):
+    _, auswahl, wissen = eintrag
+    st.session_state.auswahl = dict(auswahl)
+    if wissen != {k: st.session_state.kb[k] for k in ("whitelist", "blacklist")}:
+        st.session_state.kb = {"whitelist": list(wissen["whitelist"]), "blacklist": list(wissen["blacklist"])}
+        save_knowledge(st.session_state.kb)
+    haken_zuruecksetzen()
+    st.session_state.export = None
+
+
+def rueckgaengig():
+    if st.session_state.verlauf:
+        eintrag = st.session_state.verlauf.pop()
+        st.session_state.wiederholen.append(zustand(eintrag[0]))
+        stelle_her(eintrag)
+
+
+def wiederholen():
+    if st.session_state.wiederholen:
+        eintrag = st.session_state.wiederholen.pop()
+        st.session_state.verlauf.append(zustand(eintrag[0]))
+        stelle_her(eintrag)
+
+
 def haken_geaendert(p, fund, key):
     """Haken von Hand gesetzt oder entfernt. Nur hier wird gelernt: abgewählt -> nie
-    schwärzen; wieder gewählt -> Eintrag entfernen. Sammelaktionen lernen nicht."""
+    schwärzen; wieder gewählt -> Eintrag entfernen. Sammelaktionen lernen nicht.
+    Mit „Gleiche Angaben gemeinsam“ gilt die Entscheidung für alle Seiten."""
     wert = st.session_state[key]
-    st.session_state.auswahl[(p, fund.text.lower())] = wert
+    merke(f"„{fund.text}“ {'geschwärzt' if wert else 'freigegeben'}")
+    seiten = vorkommen().get(gleich(fund.text), [p]) if st.session_state.gemeinsam else [p]
+    for q in set(seiten) | {p}:
+        for f in funde_der_seite(q):
+            if gleich(f.text) == gleich(fund.text):
+                st.session_state.auswahl[(q, f.text.lower())] = wert
+    haken_zuruecksetzen(ausser=key)
     st.session_state.export = None
-    if not wert and not in_liste(fund.text, kb["whitelist"]):
-        kb["whitelist"].append(fund.text)
-        save_knowledge(kb)
-    elif wert and in_liste(fund.text, kb["whitelist"]):
-        kb["whitelist"] = [x for x in kb["whitelist"] if x.lower() != fund.text.lower()]
-        save_knowledge(kb)
+    wissen = st.session_state.kb
+    if not wert and not in_liste(fund.text, wissen["whitelist"]):
+        wissen["whitelist"].append(fund.text)
+        save_knowledge(wissen)
+    elif wert and in_liste(fund.text, wissen["whitelist"]):
+        wissen["whitelist"] = [x for x in wissen["whitelist"] if x.lower() != fund.text.lower()]
+        save_knowledge(wissen)
 
 
 def sammelaktion(wert, gruppe, suche):
     """Alle zu Filter und Suche passenden Fundstellen aller gescannten Seiten schwärzen
     (wert=True) oder freigeben. Gilt nur für dieses Dokument; die Wissensbasis bleibt
     unverändert, sonst landeten mit einem Klick viele Begriffe dauerhaft in „nie schwärzen“."""
+    merke(f"Alle {'geschwärzt' if wert else 'freigegeben'} ({gruppe}{', Suche „' + suche + '“' if suche else ''})")
     for p in st.session_state.woerter:
         for i, fund in enumerate(funde_der_seite(p)):
             if passt(fund, gruppe, suche):
@@ -453,6 +526,9 @@ with col_l:
             help="Normalerweise liest Grauzone die Textebene des PDFs. Nur bei Scans ohne "
                  "Textebene wird automatisch die Texterkennung genutzt. Einschalten, wenn ein "
                  "PDF Text als Bild enthält (z. B. eingefügte Scans oder Stempel).")
+        st.toggle("Gleiche Angaben gemeinsam entscheiden", key="gemeinsam",
+                  help="Ein Haken gilt für dieselbe Angabe auf allen gescannten Seiten "
+                       "(Groß-/Kleinschreibung egal). Aus: jede Seite einzeln.")
         if st.button("📚 Alle Seiten scannen", type="primary", width="stretch"):
             with st.spinner(f"{n} Seiten werden gelesen …"):
                 scanne(doc, range(n), ocr_erzwingen)
@@ -479,6 +555,7 @@ with col_l:
                 for item in list(kb["whitelist"])[-5:]:
                     st.caption(f"• {item}")
             if st.button("Gedächtnis löschen", width="stretch"):
+                merke("Gedächtnis gelöscht")
                 st.session_state.kb = {"whitelist": [], "blacklist": []}
                 save_knowledge(st.session_state.kb)
                 st.rerun()
@@ -545,6 +622,7 @@ with col_r:
             reihe = sorted(((i, f) for i, f in enumerate(funde) if passt(f, gruppe, suche)),
                            key=lambda t: (E.ist_eindeutig(t[1]), t[1].start))
             zu_pruefen = sum(1 for _, f in reihe if not E.ist_eindeutig(f))
+            mehrfach = vorkommen()
             with st.container(height=300, border=False):
                 if not funde:
                     st.caption("Keine personenbezogenen Daten erkannt.")
@@ -568,6 +646,9 @@ with col_r:
                                            on_change=haken_geaendert, args=(p_id, fund, key))
                         marke = "" if eindeutig else "<span class='gz-pruefen'>prüfen</span> "
                         gruende = " · ".join(E.begruendung(fund)) or E.ARTEN.get(fund.art, fund.art)
+                        weitere = [q + 1 for q in mehrfach.get(gleich(fund.text), []) if q != p_id]
+                        if weitere:
+                            gruende += f"<br>auch auf Seite {', '.join(map(str, weitere))}"
                         st.markdown(f"<span class='gz-art'>{marke}{i + 1} · {E.ARTEN.get(fund.art, fund.art)}"
                                     f"</span><br><span class='gz-grund'>{gruende}</span>",
                                     unsafe_allow_html=True)
@@ -578,6 +659,7 @@ with col_r:
                     "Fehlt etwas?", placeholder="Begriff eingeben, mehrere mit Komma",
                     help="Der Begriff wird auf allen gescannten Seiten geschwärzt und für künftige Dokumente gemerkt.")
                 if st.form_submit_button("➕ Hinzufügen", width="stretch") and zusatz.strip():
+                    merke(f"„{zusatz.strip()}“ hinzugefügt")
                     for begriff in [b.strip() for b in zusatz.split(",") if b.strip()]:
                         if not in_liste(begriff, kb["blacklist"]):
                             kb["blacklist"].append(begriff)
@@ -593,32 +675,52 @@ with col_r:
         if not gescannt:
             st.caption("Erst nach dem Scannen möglich.")
         else:
-            if offen:
-                st.warning(f"Nicht gescannt und daher **nicht geschwärzt**: Seite {', '.join(offen)}")
-            if st.button("🔒 Schwärzen & exportieren", type="primary", width="stretch"):
+            auswahl_text = st.text_input(
+                "Seiten", key="export_seiten", placeholder="Seiten, z. B. 1-3, 5 (leer = alle)",
+                label_visibility="collapsed", on_change=lambda: st.session_state.update(export=None),
+                help="Nur diese Seiten exportieren. Leer lassen für das ganze Dokument.")
+            try:
+                export_seiten = E.seitenauswahl(auswahl_text, n)
+                seiten_fehler = None
+            except ValueError as fehler:
+                export_seiten, seiten_fehler = [], str(fehler)
+            offen_export = [str(p + 1) for p in export_seiten if p not in st.session_state.woerter]
+            if seiten_fehler:
+                st.error(seiten_fehler)
+            elif offen_export:
+                st.warning(f"Nicht gescannt und daher **nicht geschwärzt**: Seite {', '.join(offen_export)}")
+            if st.button("🔒 Schwärzen & exportieren", type="primary", width="stretch",
+                         disabled=bool(seiten_fehler)):
+                alle = len(export_seiten) == n
                 balken = zu_schwaerzen()
                 jetzt = datetime.now()
-                pdf_daten, anzahl = E.schwaerze(file_content, balken)
-                meldungen = E.pruefe_export(pdf_daten, balken)
+                pdf_daten, anzahl = E.schwaerze(file_content, balken, None if alle else export_seiten)
+                # Prüfung im Export: Seitenindex im Export -> Balken der Originalseite
+                meldungen = E.pruefe_export(
+                    pdf_daten, {neu: balken[alt] for neu, alt in enumerate(export_seiten) if alt in balken},
+                    nummern=export_seiten)
+                im_export = [p for p in gescannt if p in export_seiten]
                 md, _ = E.markdown(
-                    [(p, st.session_state.woerter[p]["text"], funde_der_seite(p)) for p in gescannt],
+                    [(p, st.session_state.woerter[p]["text"], funde_der_seite(p)) for p in im_export],
                     ist_gewaehlt,
                     kopf=f"Erstellt mit {TITEL} am {date.today():%d.%m.%Y}. "
-                         "Gleiche Angaben tragen denselben Platzhalter.",
-                    nicht_gescannt=[p for p in range(n) if p not in st.session_state.woerter])
+                         "Gleiche Angaben tragen denselben Platzhalter."
+                         + ("" if alle else f" Exportiert: Seite {', '.join(str(p + 1) for p in export_seiten)}."),
+                    nicht_gescannt=[p for p in export_seiten if p not in st.session_state.woerter])
                 protokoll = E.pruefprotokoll(
                     version=VERSION, modell=nlp.meta.get("name", "unbekannt"),
                     zeitpunkt=f"{jetzt:%d.%m.%Y %H:%M}", original=file_content, export=pdf_daten,
                     seiten_gesamt=n, quellen={p: st.session_state.woerter[p]["quelle"] for p in gescannt},
                     funde={p: funde_der_seite(p) for p in gescannt}, gewaehlt=ist_gewaehlt,
-                    balken=anzahl, meldungen=meldungen)
+                    balken=anzahl, meldungen=meldungen, exportiert=None if alle else export_seiten)
+                gescannt_export = len(im_export)
                 # Dateinamen ohne Originalnamen (kann Personennamen enthalten), einmal je Export
                 # festgelegt, damit PDF, Markdown und Protokoll denselben Zeitstempel tragen
                 # Bindestrich statt Doppelpunkt in der Uhrzeit: Windows verbietet „:“, Browser ersetzen es
                 stempel = f"{jetzt:%Y-%m-%d_%H-%M}"
                 namen = (f"{stempel}_Anonymisiert.pdf", f"{stempel}_Anonymisiert.md",
                          f"{stempel}_Pruefprotokoll.md")
-                st.session_state.export = (pdf_daten, md, anzahl, len(gescannt), meldungen, protokoll, namen)
+                st.session_state.export = (pdf_daten, md, anzahl, gescannt_export, meldungen, protokoll, namen)
             if st.session_state.export:
                 daten, md, anzahl, seiten, meldungen, protokoll, namen = st.session_state.export
                 if meldungen:
@@ -656,10 +758,16 @@ with col_m:
         w[8].toggle("Alle Seiten", key="alle_zeigen", disabled=n == 1,
                     help="Alle Seiten untereinander zum Durchscrollen. Die Fundstellen rechts gehören "
                          "zur gewählten Seite; wählen per Pfeilen, Seitenzahl oder Seitenübersicht.")
-        st.segmented_control(
+        u = st.columns([4.2, 0.7, 0.7, 4.4], vertical_alignment="center")
+        u[0].segmented_control(
             "Ansicht", ["Original", "Ergebnis", "Beide"], key="ansicht", label_visibility="collapsed",
             help="Original: Fundstellen markiert (rot = wird geschwärzt). Ergebnis: so sieht das "
                  "geschwärzte PDF mit der aktuellen Auswahl aus. Beide: nebeneinander zum Vergleich.")
+        verlauf, vor = st.session_state.verlauf, st.session_state.wiederholen
+        u[1].button("↶", key="undo", on_click=rueckgaengig, disabled=not verlauf, width="stretch",
+                    help=f"Rückgängig: {verlauf[-1][0]}" if verlauf else "Rückgängig: nichts zu tun")
+        u[2].button("↷", key="redo", on_click=wiederholen, disabled=not vor, width="stretch",
+                    help=f"Wiederholen: {vor[-1][0]}" if vor else "Wiederholen: nichts zu tun")
     if not st.session_state.ansicht:   # erneuter Klick hebt die Auswahl auf
         st.session_state.ansicht = "Original"
     if st.session_state.ansicht != "Original" and not st.session_state.woerter:

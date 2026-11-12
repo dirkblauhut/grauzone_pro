@@ -436,23 +436,52 @@ def oeffne_pdf(daten: bytes):
     return doc
 
 
-def schwaerze(daten: bytes, rechtecke: dict[int, list[tuple]]) -> tuple[bytes, int]:
+def seitenauswahl(text: str, n: int) -> list[int]:
+    """Liest eine Seitenangabe wie „1-3, 5“ (1-basiert) und liefert sortierte
+    Seitenindizes (0-basiert). Leer heißt alle Seiten. Fehler -> ValueError."""
+    if not text.strip():
+        return list(range(n))
+    seiten: set[int] = set()
+    for teil in text.replace(";", ",").split(","):
+        teil = teil.strip().replace("–", "-")
+        if not teil:
+            continue
+        m = re.fullmatch(r"(\d+)\s*(?:-\s*(\d+))?", teil)
+        if not m:
+            raise ValueError(f"„{teil}“ ist keine Seitenangabe (Beispiel: 1-3, 5).")
+        von, bis = int(m.group(1)), int(m.group(2) or m.group(1))
+        if von > bis:
+            von, bis = bis, von
+        if von < 1 or bis > n:
+            raise ValueError(f"Seite {von if von < 1 else bis} gibt es nicht (1 bis {n}).")
+        seiten.update(range(von - 1, bis))
+    if not seiten:
+        raise ValueError("Keine Seite angegeben.")
+    return sorted(seiten)
+
+
+def schwaerze(daten: bytes, rechtecke: dict[int, list[tuple]], seiten: list[int] | None = None) -> tuple[bytes, int]:
     """Schwärzt physisch: Text, Bildteile und Vektorgrafik unter den Rechtecken
     werden entfernt, nicht nur überdeckt. Metadaten, XMP, Lesezeichen und
     eingebettete Dateien werden gelöscht.
 
     rechtecke: Seitenindex -> Rechtecke (PDF-Punkte); jede genannte Seite wird
-    bereinigt, auch mit leerer Liste. Liefert (PDF-Daten, Anzahl Rechtecke).
+    bereinigt, auch mit leerer Liste. seiten: nur diese Seiten (0-basiert, sortiert)
+    exportieren, None = alle. Liefert (PDF-Daten, Anzahl Rechtecke).
     """
     import pymupdf
     doc = oeffne_pdf(daten)
     anzahl = 0
     for p, liste in rechtecke.items():
+        if seiten is not None and p not in seiten:
+            continue
         page = doc[p]
         for r in liste:
             page.add_redact_annot(pymupdf.Rect(*r), fill=(0, 0, 0))
             anzahl += 1
         page.apply_redactions()
+    if seiten is not None and list(seiten) != list(range(len(doc))):
+        doc.select(list(seiten))
     bereinige_pdf(doc)   # Autor, Titel, XMP, Lesezeichen, Anhänge entfernen
     puffer = io.BytesIO()
     doc.save(puffer, garbage=4, deflate=True)
@@ -483,11 +512,14 @@ def bereinige_pdf(doc) -> None:
             pass
 
 
-def pruefe_export(daten: bytes, rechtecke: dict[int, list[tuple[float, float, float, float]]]) -> list[str]:
+def pruefe_export(daten: bytes, rechtecke: dict[int, list[tuple[float, float, float, float]]],
+                  nummern: list[int] | None = None) -> list[str]:
     """Prüft das fertige PDF und liefert Meldungen (leer = nichts gefunden).
 
     Die Meldungen nennen nur Art und Seite, nie den geschwärzten Text.
     rechtecke: Seitenindex (0-basiert) -> Rechtecke, die geschwärzt sein müssen.
+    nummern: bei Export einzelner Seiten die Originalseite (0-basiert) je Exportseite;
+    die Meldungen nennen dann die Seitenzahl im Original.
     Geprüft wird (1) Text unter den Balken, (2) Helligkeit der Balken im gerenderten
     Bild (deckt Scans ab), (3) Metadaten, XMP, Lesezeichen, eingebettete Dateien,
     (4) verbliebene Anmerkungen und Formularfelder.
@@ -498,10 +530,12 @@ def pruefe_export(daten: bytes, rechtecke: dict[int, list[tuple[float, float, fl
         doc = pymupdf.open(stream=daten, filetype="pdf")
     except Exception:
         return ["Das exportierte PDF lässt sich nicht erneut öffnen."]
+    def seite(p):
+        return f"Seite {(nummern[p] if nummern and p < len(nummern) else p) + 1}"
     try:
         for p, liste in sorted(rechtecke.items()):
             if p >= len(doc):
-                meldungen.append(f"Seite {p + 1} fehlt im Export.")
+                meldungen.append(f"{seite(p)} fehlt im Export.")
                 continue
             page = doc[p]
             unter_balken = hell = 0
@@ -520,9 +554,9 @@ def pruefe_export(daten: bytes, rechtecke: dict[int, list[tuple[float, float, fl
                 except Exception:
                     hell += 1
             if unter_balken:
-                meldungen.append(f"Seite {p + 1}: {unter_balken} Stelle(n) mit Text unter dem Balken.")
+                meldungen.append(f"{seite(p)}: {unter_balken} Stelle(n) mit Text unter dem Balken.")
             if hell:
-                meldungen.append(f"Seite {p + 1}: {hell} Balken im Bild nicht vollständig schwarz.")
+                meldungen.append(f"{seite(p)}: {hell} Balken im Bild nicht vollständig schwarz.")
         if any(str(v).strip() for k, v in (doc.metadata or {}).items() if k not in ("format", "encryption") and v):
             meldungen.append("Dokumenteigenschaften (Autor, Titel o. ä.) nicht leer.")
         if (doc.get_xml_metadata() or "").strip():
@@ -546,17 +580,19 @@ def pruefe_export(daten: bytes, rechtecke: dict[int, list[tuple[float, float, fl
 
 def pruefprotokoll(*, version: str, modell: str, zeitpunkt: str, original: bytes, export: bytes,
                    seiten_gesamt: int, quellen: dict[int, str], funde: dict[int, list],
-                   gewaehlt, balken: int, meldungen: list[str]) -> str:
+                   gewaehlt, balken: int, meldungen: list[str], exportiert: list[int] | None = None) -> str:
     """Prüfprotokoll als Markdown, ohne Originaldaten (kein Dateiname, kein Text der Fundstellen).
 
     quellen:  Seitenindex -> "Textebene" oder "Texterkennung" (nur gescannte Seiten)
     funde:    Seitenindex -> Liste von Fund (nur gescannte Seiten)
     gewaehlt: Funktion (Seitenindex, Fund) -> bool
     meldungen: Ergebnis von pruefe_export (leer = bestanden)
+    exportiert: nur diese Seiten (0-basiert) wurden exportiert, None = alle
     """
     import hashlib
-    gescannt = sorted(quellen)
-    offen = [p + 1 for p in range(seiten_gesamt) if p not in quellen]
+    seiten = list(range(seiten_gesamt)) if exportiert is None else list(exportiert)
+    gescannt = sorted(p for p in quellen if p in seiten)
+    offen = [p + 1 for p in seiten if p not in quellen]
     je_art: dict[str, list[int]] = {}
     for p in gescannt:
         for f in funde.get(p, []):
@@ -575,6 +611,9 @@ def pruefprotokoll(*, version: str, modell: str, zeitpunkt: str, original: bytes
          f"- Kennung des Originals (SHA-256): `{hashlib.sha256(original).hexdigest()}`",
          f"- Kennung des geschwärzten PDF (SHA-256): `{hashlib.sha256(export).hexdigest()}`",
          f"- Seiten gesamt: {seiten_gesamt}, gescannt und bearbeitet: {len(gescannt)}"]
+    if exportiert is not None and len(seiten) < seiten_gesamt:
+        z.append(f"- Exportiert wurden nur die Seiten {', '.join(str(p + 1) for p in seiten)} "
+                 f"({len(seiten)} von {seiten_gesamt})")
     for q, liste in nach_quelle.items():
         z.append(f"- Gelesen per {q}: Seite {', '.join(map(str, liste))}")
     if offen:

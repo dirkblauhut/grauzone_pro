@@ -113,5 +113,34 @@ class Pruefprotokoll(unittest.TestCase):
         self.assertIn("XMP-Metadaten nicht leer.", text)
 
 
+class EinzelneSeiten(unittest.TestCase):
+    def test_seitenauswahl(self):
+        self.assertEqual([0, 1, 2, 4], E.seitenauswahl("1-3, 5", 5))
+        self.assertEqual([0, 1, 2], E.seitenauswahl("  ", 3))
+        self.assertEqual([1, 2], E.seitenauswahl("3-2", 3))
+        for falsch in ("0", "4", "a", "1-x", ","):
+            with self.assertRaises(ValueError, msg=falsch):
+                E.seitenauswahl(falsch, 3)
+
+    def test_nur_gewaehlte_seiten_im_export(self):
+        doc = pymupdf.open()
+        for nr in range(3):
+            seite = doc.new_page()
+            seite.insert_text((72, 72), f"Blatt {nr + 1}: Erika Mustermann", fontsize=11)
+        daten = doc.tobytes()
+        rect = (72 + 0, 60, 300, 76)
+        balken = {p: [rect] for p in range(3)}
+        export, anzahl = E.schwaerze(daten, balken, [0, 2])
+        neu = pymupdf.open(stream=export, filetype="pdf")
+        self.assertEqual(2, len(neu))
+        self.assertEqual(2, anzahl, "nur Balken der exportierten Seiten")
+        self.assertNotIn("Mustermann", "".join(p.get_text() for p in neu))
+        # Prüfung mit Seitenzahlen des Originals
+        self.assertEqual([], E.pruefe_export(export, {0: [rect], 1: [rect]}, nummern=[0, 2]))
+        ohne, _ = E.schwaerze(daten, {}, [0, 2])
+        meldung = E.pruefe_export(ohne, {0: [rect], 1: [rect]}, nummern=[0, 2])
+        self.assertTrue(any(m.startswith("Seite 3:") for m in meldung), meldung)
+
+
 if __name__ == "__main__":
     unittest.main()

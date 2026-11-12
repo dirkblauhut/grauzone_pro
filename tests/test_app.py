@@ -148,6 +148,53 @@ class AppDurchlauf(unittest.TestCase):
         self.assertNotIn("Mustermann", text)
         self.assertIn("Sehr geehrte Frau", text)
 
+    def test_gleiche_angabe_auf_allen_seiten(self):
+        at = self.at
+        name = at.checkbox[0].label.strip("*")
+        self.assertEqual("Erika Mustermann", name)
+        at.checkbox[0].uncheck().run()
+        self.assertFalse(at.session_state.auswahl[(2, "erika mustermann")], "auch Seite 3")
+
+    def test_gleiche_angabe_nur_diese_seite_wenn_aus(self):
+        at = self.at
+        at.toggle(key="gemeinsam").set_value(False).run()
+        at.checkbox[0].uncheck().run()
+        self.assertNotEqual(False, at.session_state.auswahl.get((2, "erika mustermann")))
+
+    def test_rueckgaengig_und_wiederholen(self):
+        at = self.at
+        name = at.checkbox[0].label.strip("*")
+        at.checkbox[0].uncheck().run()
+        self.assertIn(name, at.session_state.kb["whitelist"])
+        knopf(at, "↶").click().run()
+        self.assertEqual([], [str(e.value) for e in at.exception])
+        self.assertTrue(at.checkbox[0].value)
+        self.assertNotIn(name, at.session_state.kb["whitelist"], "Lernen wird mit zurückgenommen")
+        knopf(at, "↷").click().run()
+        self.assertFalse(at.checkbox[0].value)
+        self.assertIn(name, at.session_state.kb["whitelist"])
+        knopf(at, "Alle freigeben").click().run()
+        knopf(at, "↶").click().run()
+        self.assertFalse(at.checkbox[0].value, "Sammelaktion zurückgenommen, Haken von Hand bleibt")
+
+    def test_export_einzelner_seiten(self):
+        at = self.at
+        at.text_input(key="export_seiten").input("9").run()
+        self.assertTrue(at.error, "ungültige Seite wird gemeldet")
+        self.assertTrue(knopf(at, "Schwärzen & exportieren").disabled)
+        at.text_input(key="export_seiten").input("3").run()
+        knopf(at, "Schwärzen & exportieren").click().run()
+        self.assertEqual([], [str(e.value) for e in at.exception])
+        pdf, md, _, _, meldungen, protokoll, _ = at.session_state.export
+        doc = pymupdf.open(stream=pdf, filetype="pdf")
+        self.assertEqual(1, len(doc))
+        self.assertIn("Absender", doc[0].get_text())
+        self.assertNotIn("Mustermann", doc[0].get_text())
+        self.assertEqual([], meldungen)
+        self.assertIn("Exportiert wurden nur die Seiten 3 (1 von 3)", protokoll)
+        self.assertIn("## Seite 3", md)
+        self.assertNotIn("## Seite 1", md)
+
 
 if __name__ == "__main__":
     unittest.main()

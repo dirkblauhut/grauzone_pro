@@ -78,7 +78,7 @@ INSTALLIEREN
    Danach öffnet sich Grauzone im Browser (http://localhost:8501).
 
 BENUTZEN
-- Starten: Grauzone PRO öffnen. Beenden: Schaltfläche „Beenden“ in der Seitenleiste oder das Terminalfenster schließen.
+- Starten: Grauzone PRO öffnen. Beenden: Schaltfläche „Beenden“ in der Kopfzeile oder das Terminalfenster schließen.
 - Alles läuft lokal. Internet wird nur für die Einrichtung gebraucht und,
   falls nicht abgeschaltet, beim Start für die Frage nach einer neuen
   Version (nur die Versionsnummer, keine Dokumente). Updates werden erst

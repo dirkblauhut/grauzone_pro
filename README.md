@@ -10,9 +10,9 @@ Grauzone PRO erkennt und schwärzt personenbezogene Daten (Namen, Orte, Organisa
 
 - **Schwärzt nur, was nötig ist:** Geschwärzt werden einzelne Namen, Anschriften oder Nummern, nicht ganze Zeilen. Anrede („Frau“, „Herr“) und der übrige Text bleiben lesbar.
 - **Erkennung:** spaCy-Sprachmodell (`de_core_news_lg`, ersatzweise `de_core_news_sm`) für Personen, Orte und Organisationen, dazu feste Muster für Telefon- und Faxnummern, E-Mail-Adressen, IBAN, Straße mit Hausnummer, Postleitzahl mit Ort, Namen nach „Herr/Frau“ und eine Vornamenliste. Datumsangaben gelten nicht als Telefonnummer.
-- **Textebene oder Texterkennung:** Hat das PDF eine Textebene, nutzt Grauzone deren genaue Wortpositionen. Gescannte Seiten liest EasyOCR. Für PDFs mit eingefügten Bildern lässt sich die Texterkennung in der Seitenleiste erzwingen.
+- **Textebene oder Texterkennung:** Hat das PDF eine Textebene, nutzt Grauzone deren genaue Wortpositionen. Gescannte Seiten liest EasyOCR. Für PDFs mit eingefügten Bildern lässt sich die Texterkennung in der Kopfzeile erzwingen.
 - **Mehrseitig:** „Alle Seiten“ scannt das ganze Dokument; beim Export werden alle gescannten Seiten geschwärzt. Nicht gescannte Seiten werden vorher deutlich gemeldet.
-- **Durch mehrseitige PDFs scrollen:** Die Vorschau zeigt alle Seiten untereinander. Mit den Pfeilen ◀ ▶, der Seitenzahl in der Seitenleiste oder „Bearbeiten“ an einer Seite springt die Vorschau zur gewählten Seite; rechts stehen deren Fundstellen. Der Scrollbereich passt sich der Fensterhöhe an. Abschaltbar in der Seitenleiste („Alle Seiten untereinander zeigen“).
+- **Durch mehrseitige PDFs scrollen:** Die Vorschau zeigt alle Seiten untereinander. Mit den Pfeilen ◀ ▶, der Seitenzahl in der Kopfzeile oder „Bearbeiten“ an einer Seite springt die Vorschau zur gewählten Seite; rechts stehen deren Fundstellen. Der Scrollbereich passt sich der Fensterhöhe an. Abschaltbar in der Kopfzeile („Alle Seiten untereinander zeigen“).
 - **Prüfen und korrigieren:** Jede Fundstelle steht mit Art (Person, Anschrift, Telefon …) in einer Liste und ist in der Vorschau rot markiert. Abwählen = bleibt stehen; fehlende Begriffe lassen sich eintippen.
 - **Lernt mit:** Abgewählte Stellen („nie schwärzen“) und eingetippte Begriffe („immer schwärzen“) merkt sich `knowledge_base.json` für künftige Dokumente.
 - **Sauberer Export:** Der Text unter den Balken wird aus dem PDF entfernt (bei Scans die Bildpunkte), die Dokument-Metadaten (Autor, Titel), XMP-Metadaten, Lesezeichen und eingebettete Dateien werden gelöscht. Nach dem Export prüft Grauzone das fertige PDF noch einmal (Text und Helligkeit unter den Balken, Metadaten, Lesezeichen, Anhänge, Anmerkungen, Formularfelder) und meldet Auffälligkeiten. Formularfelder und Anmerkungen werden vorher fest in die Seite übernommen, damit auch ihr Text unter den Balken verschwindet; im Ergebnis sind die Felder nicht mehr ausfüllbar.
@@ -31,9 +31,9 @@ Grauzone PRO erkennt und schwärzt personenbezogene Daten (Namen, Orte, Organisa
    - macOS 15 und neuer: **Systemeinstellungen → Datenschutz & Sicherheit → „Dennoch öffnen“**.
 4. Beim ersten Start öffnet sich ein Terminalfenster und lädt einmalig Python 3.11, Bibliotheken und KI-Modelle (ca. 2 GB, 5–15 Minuten). Danach öffnet sich Grauzone im Browser unter <http://localhost:8501>. Später startet die App in wenigen Sekunden.
 
-**Updates:** Ab Version 0.4.0 sucht Grauzone beim Start nach einer neuen Version und fragt im Terminalfenster, ob sie installiert werden soll. Eine neue DMG und eine erneute Freigabe in macOS sind dafür nicht nötig. Abschalten lässt sich das in der Seitenleiste („Beim Start nach neuen Versionen suchen“).
+**Updates:** Ab Version 0.4.0 sucht Grauzone beim Start nach einer neuen Version und fragt im Terminalfenster, ob sie installiert werden soll. Eine neue DMG und eine erneute Freigabe in macOS sind dafür nicht nötig. Abschalten lässt sich das in der Kopfzeile („Beim Start nach neuen Versionen suchen“).
 
-Beenden: Schaltfläche „Beenden“ in der Seitenleiste (danach das Terminalfenster schließen) oder das Terminalfenster schließen. Python-Umgebung, Wissensbasis und Vornamenliste liegen in `~/Library/Application Support/Grauzone PRO`. Zum vollständigen Entfernen die App und diesen Ordner löschen.
+Beenden: Schaltfläche „Beenden“ in der Kopfzeile (danach das Terminalfenster schließen) oder das Terminalfenster schließen. Python-Umgebung, Wissensbasis und Vornamenliste liegen in `~/Library/Application Support/Grauzone PRO`. Zum vollständigen Entfernen die App und diesen Ordner löschen.
 
 Die DMG enthält nur einen kleinen Starter, keine Python-Bibliotheken. Sie wird mit `sh macos/build_dmg.sh` gebaut (Ergebnis in `dist/`, Icon: `macos/make_icon.py`) und als Anhang an ein GitHub-Release gehängt.
 
@@ -49,7 +49,7 @@ Die DMG enthält nur einen kleinen Starter, keine Python-Bibliotheken. Sie wird 
    - legt im Ordner eine eigene Umgebung `venv` an und installiert dort die Bibliotheken,
    - lädt die deutschen spaCy-Modelle und die EasyOCR-Modelle,
    - startet Grauzone im Browser unter <http://localhost:8501>.
-4. **Künftig:** Doppelklick auf **`START_GRAUZONE.command`**. Beenden: Schaltfläche „Beenden“ in der Seitenleiste oder Terminalfenster schließen.
+4. **Künftig:** Doppelklick auf **`START_GRAUZONE.command`**. Beenden: Schaltfläche „Beenden“ in der Kopfzeile oder Terminalfenster schließen.
 
 Das Installationsprogramm kann jederzeit erneut ausgeführt werden, etwa nach einem Update. Vorhandenes wird nur ergänzt.
 

@@ -6,7 +6,9 @@ streamlit>=1.50,<1.68
 pymupdf>=2.1,<2.2; python_version >= "3.11"
 pymupdf>=1.26.5,<1.27; python_version < "3.11"
 pillow
-easyocr
+# EasyOCR 1.7.2 ist getestet (Wortgrenzen per width_ths). Grenze erst nach einem
+# Scan-Test (GRAUZONE_OCR_TEST=1) anheben.
+easyocr>=1.7.2,<1.8
 faker
 # spaCy 3.5 ist nur mit numpy 1.x gebaut und läuft nur mit Python bis 3.11
 spacy>=3.5.0,<3.6.0

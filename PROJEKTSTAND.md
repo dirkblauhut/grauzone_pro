@@ -1,6 +1,6 @@
 # Projektstand: Grauzone PRO
 
-Stand: 2026-11-11, Branch main, Commit b02707d (Release `v0.4.4`), darauf folgt der Commit zu 0.4.5 (`macos/VERSION` = 0.4.5)
+Stand: 2026-11-11, Branch main, Commit b02707d (Release `v0.4.4`), Release `v0.4.5` ist veröffentlicht; darauf folgt 0.4.6 (`macos/VERSION` = 0.4.6)
 
 Ergänzt [UEBERGABE.md](UEBERGABE.md). Dort stehen Dateiübersicht, Funktionsweise der Mac-App, Release-Ablauf (Abschnitt 4) und Testanleitung (Abschnitt 5). Diese Datei hält Festlegungen, Learnings und Sackgassen fest und wird nicht mit UEBERGABE.md zusammengeführt.
 
@@ -108,7 +108,8 @@ Verworfene Ansätze:
 
 - [ ] Nächste Version (Ideen des Nutzers vom 2026-11-11, Reihenfolge offen):
   - [ ] Oberfläche modern gestalten (UI/UX)
-- [ ] Release 0.4.5 mit allen vier Anhängen veröffentlichen (Priorität hoch); Selbst-Update beim Nutzer echt prüfen (Nutzer lief am 2026-11-11 noch mit 0.4.3)
+- [x] Release 0.4.5 veröffentlicht (2026-11-11)
+- [ ] Release 0.4.6 mit allen vier Anhängen (DMG, `grauzone-update.tar.gz`, `SHA256SUMS`, `VERSION`) auf einem Mac bauen und veröffentlichen (Priorität hoch, Code auf `main`, Tag gesetzt); Selbst-Update beim Nutzer echt prüfen (Nutzer lief am 2026-11-11 noch mit 0.4.3)
 - [ ] EasyOCR ist nicht nach oben begrenzt (installiert 1.7.2) (niedrig)
 - [ ] Dateiname des Exports übernimmt den Originalnamen (`Anonymisiert_<Name>`), der selbst Personennamen enthalten kann (mittel)
 - [ ] Gleiche Person in anderer Schreibweise („Mustermann, Erika“ / „Erika Mustermann“) bekommt im Markdown verschiedene Nummern (niedrig)

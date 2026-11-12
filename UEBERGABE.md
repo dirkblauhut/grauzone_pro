@@ -100,3 +100,4 @@ Die App ist nur ad hoc signiert, nicht notarisiert. macOS fragt beim ersten Öff
 | 0.4.3 | 11.11.2026 | `import pymupdf` statt `import fitz`, PyMuPDF-Version begrenzt |
 | 0.4.4 | 11.11.2026 | Vorschau zeigt alle Seiten zum Scrollen, Blättern mit ◀ ▶ und „Bearbeiten“ |
 | 0.4.5 | 11.11.2026 | ◀ ▶, Seitenzahl und Schalter scrollen die Vorschau zur Seite; Scrollbereich passt sich der Fensterhöhe an |
+| 0.4.6 | 12.11.2026 | Erkennung: Name über Zeilenumbruch nach Anrede, Name nach Feldbezeichnung („Absender:“), E-Mail und IBAN auch bei OCR-Fehlern auf Scan-Seiten |

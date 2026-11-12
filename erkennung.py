@@ -352,3 +352,86 @@ def markdown(seiten, gewaehlt, kopf: str = "", nicht_gescannt=()) -> tuple[str, 
         teile.append("  \n".join(zeilen) if zeilen else "*(kein Text)*")
         teile.append("")
     return "\n".join(teile), anzahl
+
+
+# --- 4. Export bereinigen und prüfen --------------------------------------------
+
+def bereinige_pdf(doc) -> None:
+    """Entfernt, was apply_redactions() und set_metadata() nicht erfassen.
+
+    Dazu gehören XMP-Metadaten (zweiter Metadatensatz neben dem Info-Wörterbuch),
+    Lesezeichen und eingebettete Dateien. Alle drei können Namen enthalten.
+    """
+    doc.set_metadata({})
+    try:
+        doc.del_xml_metadata()
+    except Exception:
+        pass
+    try:
+        doc.set_toc([])
+    except Exception:
+        pass
+    for name in list(doc.embfile_names()):
+        try:
+            doc.embfile_del(name)
+        except Exception:
+            pass
+
+
+def pruefe_export(daten: bytes, rechtecke: dict[int, list[tuple[float, float, float, float]]]) -> list[str]:
+    """Prüft das fertige PDF und liefert Meldungen (leer = nichts gefunden).
+
+    Die Meldungen nennen nur Art und Seite, nie den geschwärzten Text.
+    rechtecke: Seitenindex (0-basiert) -> Rechtecke, die geschwärzt sein müssen.
+    Geprüft wird (1) Text unter den Balken, (2) Helligkeit der Balken im gerenderten
+    Bild (deckt Scans ab), (3) Metadaten, XMP, Lesezeichen, eingebettete Dateien,
+    (4) verbliebene Anmerkungen und Formularfelder.
+    """
+    import pymupdf
+    meldungen: list[str] = []
+    try:
+        doc = pymupdf.open(stream=daten, filetype="pdf")
+    except Exception:
+        return ["Das exportierte PDF lässt sich nicht erneut öffnen."]
+    try:
+        for p, liste in sorted(rechtecke.items()):
+            if p >= len(doc):
+                meldungen.append(f"Seite {p + 1} fehlt im Export.")
+                continue
+            page = doc[p]
+            unter_balken = hell = 0
+            for r in liste:
+                rect = pymupdf.Rect(*r)
+                innen = rect + (1.0, 1.0, -1.0, -1.0)   # Randzeichen der Nachbarwörter nicht mitzählen
+                if innen.is_empty:
+                    continue
+                # Satzzeichen neben dem Fund bleiben absichtlich stehen und zählen nicht
+                if any(c.isalnum() for c in page.get_text("text", clip=innen)):
+                    unter_balken += 1
+                try:
+                    pix = page.get_pixmap(matrix=pymupdf.Matrix(2, 2), clip=innen, colorspace=pymupdf.csGRAY)
+                    if pix.samples and sum(pix.samples) / len(pix.samples) > 60:
+                        hell += 1
+                except Exception:
+                    hell += 1
+            if unter_balken:
+                meldungen.append(f"Seite {p + 1}: {unter_balken} Stelle(n) mit Text unter dem Balken.")
+            if hell:
+                meldungen.append(f"Seite {p + 1}: {hell} Balken im Bild nicht vollständig schwarz.")
+        if any(str(v).strip() for k, v in (doc.metadata or {}).items() if k not in ("format", "encryption") and v):
+            meldungen.append("Dokumenteigenschaften (Autor, Titel o. ä.) nicht leer.")
+        if (doc.get_xml_metadata() or "").strip():
+            meldungen.append("XMP-Metadaten nicht leer.")
+        if doc.get_toc():
+            meldungen.append("Lesezeichen vorhanden.")
+        if doc.embfile_names():
+            meldungen.append("Eingebettete Dateien vorhanden.")
+        anm = sum(1 for page in doc for _ in page.annots())
+        if anm:
+            meldungen.append(f"{anm} Anmerkung(en) vorhanden.")
+        felder = sum(1 for page in doc for _ in page.widgets())
+        if felder:
+            meldungen.append(f"{felder} Formularfeld(er) vorhanden.")
+    finally:
+        doc.close()
+    return meldungen

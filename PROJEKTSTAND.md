@@ -1,6 +1,6 @@
 # Projektstand: Grauzone PRO
 
-Stand: 2026-11-11, Branch main, Commit b02707d (Release `v0.4.4`), Release `v0.4.5` ist veröffentlicht; darauf folgt 0.4.6 (`macos/VERSION` = 0.4.6)
+Stand: 2026-11-11, Branch main, Commit b02707d (Release `v0.4.4`), Release `v0.4.5` ist veröffentlicht; darauf folgen 0.4.6 und 0.4.7 (`macos/VERSION` = 0.4.7)
 
 Ergänzt [UEBERGABE.md](UEBERGABE.md). Dort stehen Dateiübersicht, Funktionsweise der Mac-App, Release-Ablauf (Abschnitt 4) und Testanleitung (Abschnitt 5). Diese Datei hält Festlegungen, Learnings und Sackgassen fest und wird nicht mit UEBERGABE.md zusammengeführt.
 
@@ -92,6 +92,7 @@ Starten und Testen:
 | Auswahl auf anderer Seite verloren | Streamlit löscht Zustand verborgener Widgets | `st.session_state.auswahl` (`app.py:239`) | Auswahl nur über Checkbox-Keys halten |
 | ◀ ▶ und Seitenzahl wechselten nur die Fundstellen-Liste, die Vorschau blieb stehen; Scrollbereich höher als das Fenster | Streamlit scrollt nicht selbst; `st.container(height=900)` fest | `zur_seite_scrollen` und CSS-Höhe in `app.py` (0.4.5) | Feste Container-Höhe über Fensterhöhe; CSS nur auf den Container statt auf seinen Wrapper (`flex: 0 0 800px` gewinnt) |
 | Quarantäne-Attribut auf kopierten Dateien der Mac-App | Kopieren aus dem App-Bundle | Kopieren per `cat` in `macos/Grauzone-launcher.sh` | `cp` für diese Kopie verwenden |
+| Name in XMP-Metadaten, Lesezeichen oder eingebetteter Datei nach Export weiter im PDF (Messung 2026-11-12 mit erfundenen Daten) | `set_metadata({})` leert nur das Info-Wörterbuch; `apply_redactions()` erfasst nur Seiteninhalt | `E.bereinige_pdf` (XMP, Lesezeichen, Anhänge) und `E.pruefe_export` (Text und Helligkeit unter den Balken, Metadaten, Anmerkungen, Formularfelder), Tests `tests/test_export_pruefung.py` (0.4.7) | Beim Export nur `set_metadata({})` aufrufen; Satzzeichen neben einem Fund als Fehler der Prüfung zählen (bleiben absichtlich stehen) |
 | Name in PDF-Formularfeld nach Export lesbar über grauem Balken, Wert weiter in der Datei | `apply_redactions()` entfernt keine Formularfelder und Anmerkungen | `oeffne_pdf()` mit `widget.update()` und `doc.bake()` (`app.py`, 0.3.1) | PDF in `app.py` direkt mit `pymupdf.open` öffnen |
 | Schalter in der Seitenleiste sprang nach dem Einschalten zurück | `st.toggle` mit wechselndem `value=` erzeugt bei jedem Lauf ein neues Widget | Fester `key="update_pruefen"`, Startwert einmal in `st.session_state` (`app.py`, 0.4.0) | Bei Widgets mit gespeichertem Zustand `value=` aus einer Datei ableiten |
 | Nach Update der Mac-App lief weiter der alte Code, Export erneut ungeschwärzt | Starter holte nur den Browser nach vorn, wenn schon ein Server lief | Versionsvergleich und Beenden des alten Servers in `macos/Grauzone-launcher.sh`, Version in der Seitenleiste (`app.py` `lies_version`, 0.3.2) | Bei laufendem Server ohne Versionsvergleich nur den Browser öffnen |
@@ -109,7 +110,7 @@ Verworfene Ansätze:
 - [ ] Nächste Version (Ideen des Nutzers vom 2026-11-11, Reihenfolge offen):
   - [ ] Oberfläche modern gestalten (UI/UX)
 - [x] Release 0.4.5 veröffentlicht (2026-11-11)
-- [ ] Release 0.4.6 mit allen vier Anhängen (DMG, `grauzone-update.tar.gz`, `SHA256SUMS`, `VERSION`) auf einem Mac bauen und veröffentlichen (Priorität hoch; Code auf `main`, Tag `v0.4.6` noch nicht auf GitHub, Push aus der Cloud-Sitzung scheiterte); Selbst-Update beim Nutzer echt prüfen (Nutzer lief am 2026-11-11 noch mit 0.4.3)
+- [ ] Release 0.4.7 (enthält 0.4.6; Tag und Release für 0.4.6 entfallen) mit allen vier Anhängen (DMG, `grauzone-update.tar.gz`, `SHA256SUMS`, `VERSION`) auf einem Mac bauen und veröffentlichen (Priorität hoch; Tag-Push aus der Cloud-Sitzung scheiterte, Tag und Release auf dem Mac); Selbst-Update beim Nutzer echt prüfen (Nutzer lief am 2026-11-11 noch mit 0.4.3)
 - [ ] EasyOCR ist nicht nach oben begrenzt (installiert 1.7.2) (niedrig)
 - [ ] Dateiname des Exports übernimmt den Originalnamen (`Anonymisiert_<Name>`), der selbst Personennamen enthalten kann (mittel)
 - [ ] Gleiche Person in anderer Schreibweise („Mustermann, Erika“ / „Erika Mustermann“) bekommt im Markdown verschiedene Nummern (niedrig)

@@ -1,6 +1,8 @@
 import io
 import json
 import os
+import signal
+import threading
 from datetime import date
 
 import easyocr
@@ -128,6 +130,14 @@ with st.sidebar.expander("🧠 Lernfortschritt & Gedächtnis", expanded=False):
         st.write("**Zuletzt gelernt (nie schwärzen):**")
         for item in list(kb["whitelist"])[-5:]:
             st.caption(f"• {item}")
+
+if st.sidebar.button("⏻ Beenden", width="stretch",
+                     help="Beendet Grauzone. Nicht heruntergeladene Ergebnisse gehen verloren."):
+    # Erst die Meldung ausliefern, dann den Server kurz verzögert beenden
+    threading.Timer(1.0, lambda: os.kill(os.getpid(), signal.SIGTERM)).start()
+    st.info("**Grauzone wurde beendet.** Dieses Browserfenster und das Terminalfenster "
+            "„Grauzone PRO“ können geschlossen werden. Zum erneuten Start Grauzone PRO neu öffnen.")
+    st.stop()
 
 uploaded_file = st.file_uploader("PDF Dokument hochladen", type="pdf")
 
@@ -339,19 +349,27 @@ if uploaded_file:
                                 page.add_redact_annot(pymupdf.Rect(*r), fill=(0, 0, 0))
                                 anzahl += 1
                     page.apply_redactions()
-                out.set_metadata({})   # Autor, Titel usw. entfernen
+                E.bereinige_pdf(out)   # Autor, Titel, XMP, Lesezeichen, Anhänge entfernen
                 puffer = io.BytesIO()
                 out.save(puffer, garbage=4, deflate=True)
+                meldungen = E.pruefe_export(puffer.getvalue(), {
+                    p: [r for fund in funde_der_seite(p) if ist_gewaehlt(p, fund) for r in rechtecke(p, fund)]
+                    for p in gescannt})
                 md, _ = E.markdown(
                     [(p, st.session_state.woerter[p]["text"], funde_der_seite(p)) for p in gescannt],
                     ist_gewaehlt,
                     kopf=f"Erstellt mit {TITEL} am {date.today():%d.%m.%Y}. "
                          "Gleiche Angaben tragen denselben Platzhalter.",
                     nicht_gescannt=[p for p in range(n) if p not in st.session_state.woerter])
-                st.session_state.export = (puffer.getvalue(), md, anzahl, len(gescannt))
+                st.session_state.export = (puffer.getvalue(), md, anzahl, len(gescannt), meldungen)
             if st.session_state.export:
-                daten, md, anzahl, seiten = st.session_state.export
-                st.success(f"{anzahl} Stellen auf {seiten} Seite(n) geschwärzt.")
+                daten, md, anzahl, seiten, meldungen = st.session_state.export
+                if meldungen:
+                    st.error("**Exportprüfung nicht bestanden.** Das PDF vor der Weitergabe nicht verwenden, "
+                             "sondern prüfen:\n\n" + "\n".join(f"- {m}" for m in meldungen))
+                else:
+                    st.success(f"{anzahl} Stellen auf {seiten} Seite(n) geschwärzt. "
+                               "Exportprüfung bestanden (Text, Balken, Metadaten, Lesezeichen, Anhänge).")
                 name = os.path.splitext(uploaded_file.name)[0]
                 d1, d2 = st.columns(2)
                 d1.download_button("📥 PDF", daten, f"Anonymisiert_{name}.pdf",

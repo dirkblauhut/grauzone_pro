@@ -1,6 +1,6 @@
 # Projektstand: Grauzone PRO
 
-Stand: 2026-11-11, Branch redesign (abgezweigt von main bei 53bf816, Release `v0.4.5`)
+Stand: 2026-11-12, Branch redesign (abgezweigt von main bei 53bf816, Release `v0.4.5`; `main` bis 0.4.7 am 2026-11-12 eingearbeitet)
 
 Ergänzt [UEBERGABE.md](UEBERGABE.md). Dort stehen Dateiübersicht, Funktionsweise der Mac-App, Release-Ablauf (Abschnitt 4) und Testanleitung (Abschnitt 5). Diese Datei hält Festlegungen, Learnings und Sackgassen fest und wird nicht mit UEBERGABE.md zusammengeführt.
 
@@ -106,6 +106,7 @@ Starten und Testen:
 | Tests schrieben in die echte `knowledge_base.json` | Abwählen lernt „nie schwärzen“, App liest relativ zum Arbeitsordner | `tests/test_app.py` startet in `tempfile.mkdtemp()` | App-Tests im Projektordner laufen lassen |
 | ◀ ▶ und Seitenzahl wechselten nur die Fundstellen-Liste, die Vorschau blieb stehen; Scrollbereich höher als das Fenster | Streamlit scrollt nicht selbst; `st.container(height=900)` fest | `zur_seite_scrollen` und CSS-Höhe in `app.py` (0.4.5) | Feste Container-Höhe über Fensterhöhe; CSS nur auf den Container statt auf seinen Wrapper (`flex: 0 0 800px` gewinnt) |
 | Quarantäne-Attribut auf kopierten Dateien der Mac-App | Kopieren aus dem App-Bundle | Kopieren per `cat` in `macos/Grauzone-launcher.sh` | `cp` für diese Kopie verwenden |
+| Name in XMP-Metadaten, Lesezeichen oder eingebetteter Datei nach Export weiter im PDF (Messung 2026-11-12 mit erfundenen Daten) | `set_metadata({})` leert nur das Info-Wörterbuch; `apply_redactions()` erfasst nur Seiteninhalt | `E.bereinige_pdf` (XMP, Lesezeichen, Anhänge) und `E.pruefe_export` (Text und Helligkeit unter den Balken, Metadaten, Anmerkungen, Formularfelder), Tests `tests/test_export_pruefung.py` (0.4.7) | Beim Export nur `set_metadata({})` aufrufen; Satzzeichen neben einem Fund als Fehler der Prüfung zählen (bleiben absichtlich stehen) |
 | Name in PDF-Formularfeld nach Export lesbar über grauem Balken, Wert weiter in der Datei | `apply_redactions()` entfernt keine Formularfelder und Anmerkungen | `oeffne_pdf()` mit `widget.update()` und `doc.bake()` (`app.py`, 0.3.1; jetzt `erkennung.py`, Test `test_formularwert_wird_entfernt`) | PDF in `app.py` direkt mit `pymupdf.open` öffnen |
 | Schalter in der Seitenleiste sprang nach dem Einschalten zurück | `st.toggle` mit wechselndem `value=` erzeugt bei jedem Lauf ein neues Widget | Fester `key="update_pruefen"`, Startwert einmal in `st.session_state` (`app.py`, 0.4.0) | Bei Widgets mit gespeichertem Zustand `value=` aus einer Datei ableiten |
 | Nach Update der Mac-App lief weiter der alte Code, Export erneut ungeschwärzt | Starter holte nur den Browser nach vorn, wenn schon ein Server lief | Versionsvergleich und Beenden des alten Servers in `macos/Grauzone-launcher.sh`, Version in der Seitenleiste (`app.py` `lies_version`, 0.3.2) | Bei laufendem Server ohne Versionsvergleich nur den Browser öffnen |
@@ -124,9 +125,13 @@ Verworfene Ansätze:
 - [ ] `st.components.v1.html` (Scroll-Sprung in `zur_seite_scrollen`, auch in 0.4.5) ist ab Streamlit 1.68 abgekündigt, Ersatz `st.iframe`; vor Anheben der Grenze `<1.68` umstellen und Sprung im Browser prüfen (mittel)
 - [ ] Datumsprüfung `_ist_datum` in `finde` ist beim jetzigen TEL-Muster wirkungslos (kein Datum passt auf das Muster); bei Änderungen am TEL-Muster Test `test_datum_ist_keine_telefonnummer` beachten (niedrig)
 - [ ] Selbst-Update auf 0.4.5 beim Nutzer echt prüfen (Nutzer lief am 2026-11-11 noch mit 0.4.3) (hoch)
+- [ ] Release 0.4.7 (enthält 0.4.6; Tag und Release für 0.4.6 entfallen) mit allen vier Anhängen (DMG, `grauzone-update.tar.gz`, `SHA256SUMS`, `VERSION`) auf einem Mac bauen und veröffentlichen (Priorität hoch; Tag-Push aus der Cloud-Sitzung scheiterte, Tag und Release auf dem Mac); Selbst-Update beim Nutzer echt prüfen (Nutzer lief am 2026-11-11 noch mit 0.4.3)
 - [ ] EasyOCR ist nicht nach oben begrenzt (installiert 1.7.2) (niedrig)
 - [ ] Dateiname des Exports übernimmt den Originalnamen (`Anonymisiert_<Name>`), der selbst Personennamen enthalten kann (mittel)
 - [ ] Gleiche Person in anderer Schreibweise („Mustermann, Erika“ / „Erika Mustermann“) bekommt im Markdown verschiedene Nummern (niedrig)
+- [x] Behoben 2026-11-12 (Muster `PER_UMBRUCH`, Stoppwortliste `NICHT_NAME`, Folgewort nach Anrede am Zeilenumbruch; zusätzlich Muster `PER_FELD` für „Absender:“, „Name:“ u. ä. mit Name, damit auch `lg` „Max Beispiel“ ohne Anrede erfasst): Fund aus Testlauf 2026-11-12 (erfundene Daten, `erkennung.py` ohne Oberfläche, spaCy 3.5.0, PyMuPDF 2.1, EasyOCR 1.7.2 auf CPU; Skript nur im Scratch-Bereich): Name über Zeilenumbruch wird nicht vollständig geschwärzt (Priorität hoch). Bei „Herrn Max⏎Beispiel“ greift das Anrede-Muster nicht (`[ \t]+` quert keinen Umbruch), und die Aufteilung der spaCy-Entitäten an `\n` (`erkennung.py:162`) lässt „Beispiel“ allein ohne Entität zurück. Ergebnis `de_core_news_sm`: „Beispiel“ bleibt lesbar. Ergebnis `de_core_news_lg`: „Max Beispiel“ im Absenderblock wird gar nicht erkannt, „Beispiel“ bleibt zweimal lesbar. Änderung betrifft die Festlegung „Aufteilen an `\n`“ (Abschnitt 3) und braucht vorher Rückfrage.
+- [x] Behoben 2026-11-12 (IBAN-Muster mit O/o, I/l-Toleranz und Prüfung `_ist_iban`; Wort mit „@“ wird ganz erfasst, fehlende Punkt-Endung angehängt; Wiederholung des Testlaufs mit `sm` und `lg` ohne Rest): Fund aus Testlauf 2026-11-12: Auf Scan-Seiten werden E-Mail und IBAN wegen OCR-Fehlern nicht erkannt (Priorität hoch). Beispiel OCR-Text: „erika.mustermann@example org“ (Punkt fehlt) und „DEO2 1203 000o 000o 2020 51“ (O statt 0); die Muster `MAIL` und `IBAN` greifen dann nicht, beide Angaben bleiben im Bild stehen. Textebene derselben Seite wird korrekt erkannt. Lösungsansatz offen (fehlertolerante Muster, Warnhinweis bei Scan-Seiten, Prüfung auf „@“ im Seitentext).
+- [ ] Fund aus Testlauf 2026-11-12 (niedrig): Mit `de_core_news_lg` wird „Stadt“ aus „Stadt Musterstadt“ als ORT erkannt, „Musterstadt“ im selben Satz auf Seite 1 nicht; mit `sm` umgekehrt. Verhalten hängt vom Modell ab. Bei Scans sitzt der Balken vor „Mustermann“ nach „Frau“ minimal zu weit links und kürzt das „u“ von „Frau“ an (kosmetisch).
 - [ ] Mehrseitige echte Dokumente testen, Text- und Scan-Seiten gemischt, auch Formulare; dabei Tempo der Vorschau bei vielen Seiten prüfen (Priorität hoch, nächster Schritt)
 - [ ] Gesundheitsangaben (Art. 9 DSGVO, z. B. „Medikation: 30 mg“), Alter und Datum werden nicht erkannt; Bedarf klären (mittel)
 - [ ] Breitere Balken bei Scans: Wortgrenzen genauer schätzen, ohne Buchstabenreste (mittel)
@@ -139,6 +144,8 @@ Verworfene Ansätze:
 ### Nächster konkreter Schritt
 
 Rückmeldung des Nutzers zum neuen Layout einholen (`START_TEST.command`, Port 8502) und einarbeiten. Danach die nächste Funktion aus dem Entwurf mit dem Nutzer wählen (Vorschlag: Fundstellen direkt in der Vorschau anklicken, oder Rückgängig). Prüfen: `./venv/bin/python -m unittest discover -s tests` ohne Fehler; im Browser mit erfundenem mehrseitigem PDF scannen, Haken entfernen (Karte und Vorschau grau), exportieren.
+
+Stand 2026-11-12: Erkennungskorrekturen (0.4.6) und Exportprüfung samt „Beenden“ (0.4.7) von `main` übernommen; „Beenden“ steht in der Kopfzeile neben dem ⚙-Menü.
 
 ## Ungeprüft
 

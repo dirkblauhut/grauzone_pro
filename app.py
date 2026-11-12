@@ -1,6 +1,8 @@
 import io
 import json
 import os
+import signal
+import threading
 from datetime import date
 
 import easyocr
@@ -234,7 +236,7 @@ header[data-testid="stHeader"] { display:none; }
 st.markdown(STIL, unsafe_allow_html=True)
 
 kopfzeile = st.container(key="kopfzeile")
-kopf_l, kopf_r = kopfzeile.columns([12, 1], vertical_alignment="center")
+kopf_l, kopf_b, kopf_r = kopfzeile.columns([11, 1.6, 1], vertical_alignment="center")
 kopf_l.markdown(
     f"""<div class="gz-kopf"><span class="gz-logo">🛡️</span>
     <span class="gz-name">Grauzone <b>PRO</b></span>
@@ -242,6 +244,13 @@ kopf_l.markdown(
     <span class="gz-rechts"><span class="gz-badge gz-test">Testversion</span>
     <span class="gz-badge"><span class="punkt">●</span> Lokal · v{VERSION}</span></span></div>""",
     unsafe_allow_html=True)
+if kopf_b.button("⏻ Beenden", width="stretch",
+                 help="Beendet Grauzone. Nicht heruntergeladene Ergebnisse gehen verloren."):
+    # Erst die Meldung ausliefern, dann den Server kurz verzögert beenden
+    threading.Timer(1.0, lambda: os.kill(os.getpid(), signal.SIGTERM)).start()
+    st.info("**Grauzone wurde beendet.** Dieses Browserfenster und das Terminalfenster "
+            "„Grauzone PRO“ können geschlossen werden. Zum erneuten Start Grauzone PRO neu öffnen.")
+    st.stop()
 with kopf_r.popover("⚙️", help="Einstellungen", width="stretch"):
     st.markdown("**Einstellungen**")
     # Selbst-Update der Mac-App (grauzone-update.sh liegt nur im Datenordner der App)
@@ -510,19 +519,26 @@ with col_r:
             if offen:
                 st.warning(f"Nicht gescannt und daher **nicht geschwärzt**: Seite {', '.join(offen)}")
             if st.button("🔒 Schwärzen & exportieren", type="primary", width="stretch"):
-                pdf_daten, anzahl = E.schwaerze(file_content, {
+                zu_schwaerzen = {
                     p: [r for fund in funde_der_seite(p) if ist_gewaehlt(p, fund) for r in rechtecke(p, fund)]
-                    for p in gescannt})
+                    for p in gescannt}
+                pdf_daten, anzahl = E.schwaerze(file_content, zu_schwaerzen)
+                meldungen = E.pruefe_export(pdf_daten, zu_schwaerzen)
                 md, _ = E.markdown(
                     [(p, st.session_state.woerter[p]["text"], funde_der_seite(p)) for p in gescannt],
                     ist_gewaehlt,
                     kopf=f"Erstellt mit {TITEL} am {date.today():%d.%m.%Y}. "
                          "Gleiche Angaben tragen denselben Platzhalter.",
                     nicht_gescannt=[p for p in range(n) if p not in st.session_state.woerter])
-                st.session_state.export = (pdf_daten, md, anzahl, len(gescannt))
+                st.session_state.export = (pdf_daten, md, anzahl, len(gescannt), meldungen)
             if st.session_state.export:
-                daten, md, anzahl, seiten = st.session_state.export
-                st.success(f"{anzahl} Stellen auf {seiten} Seite(n) geschwärzt.")
+                daten, md, anzahl, seiten, meldungen = st.session_state.export
+                if meldungen:
+                    st.error("**Exportprüfung nicht bestanden.** Das PDF vor der Weitergabe nicht verwenden, "
+                             "sondern prüfen:\n\n" + "\n".join(f"- {m}" for m in meldungen))
+                else:
+                    st.success(f"{anzahl} Stellen auf {seiten} Seite(n) geschwärzt. "
+                               "Exportprüfung bestanden (Text, Balken, Metadaten, Lesezeichen, Anhänge).")
                 name = os.path.splitext(uploaded_file.name)[0]
                 d1, d2 = st.columns(2)
                 d1.download_button("📥 Geschwärztes PDF", daten, f"Anonymisiert_{name}.pdf",

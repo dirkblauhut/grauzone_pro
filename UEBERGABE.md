@@ -29,8 +29,6 @@ Grauzone PRO schwärzt personenbezogene Daten in PDF-Dokumenten, vollständig lo
 | `START_GRAUZONE.command`, `starten.command` | Start nach der Einrichtung |
 | `setup_project.py` | Einrichtung für den Weg über das Terminal |
 | `macos/` | Mac-App: Starter, Einrichtungsskript, Icon, `build_dmg.sh`, `VERSION` |
-| `run_app.py`, `hooks/` | PyInstaller-Weg (nicht genutzt, nicht getestet) |
-| `evaluate_system.py`, `generate_train_data.py`, `design.md` | aus der ersten Fassung, nicht überarbeitet |
 
 Lokale Daten (nicht im Repository): `knowledge_base.json` (gelernte Begriffe: `blacklist` = immer schwärzen, `whitelist` = nie schwärzen), `vornamen.txt`.
 
@@ -83,7 +81,6 @@ Die App ist nur ad hoc signiert, nicht notarisiert. macOS fragt beim ersten Öff
 - **Gelernte „nie schwärzen“-Begriffe** gelten überall. Ein versehentlich abgewähltes Wort (z. B. ein Nachname) wird danach in allen Dokumenten übersehen, bis man es wieder anhakt oder das Gedächtnis löscht.
 - **Lange Dokumente:** Die Texterkennung dauert etwa 15 bis 20 Sekunden pro Scan-Seite auf der CPU.
 - **Notarisierung** bräuchte ein Apple-Entwicklerkonto (99 €/Jahr).
-- **Alte Dateien** (`evaluate_system.py`, `generate_train_data.py`, `design.md`, PyInstaller-Weg) sind nicht an 0.3.0 angepasst.
 - **Lizenz:** Grauzone steht unter MIT. PyMuPDF steht unter AGPL. Solange die Bibliotheken bei der Einrichtung geladen und nicht mitgeliefert werden, ist das unproblematisch; beim PyInstaller-Weg nicht.
 
 ## 8. Verlauf

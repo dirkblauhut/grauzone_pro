@@ -31,7 +31,7 @@ Struktur:
 - `.streamlit/config.toml`: `address = "localhost"`, `headless = true`, `gatherUsageStats = false`.
 - `macos/`: `Grauzone-launcher.sh` (App-Starter), `grauzone-start.sh` (Einrichtung und Start im Datenordner), `grauzone-update.sh` (Selbst-Update), `build_dmg.sh`, `make_icon.py`, `VERSION`.
 - `Grauzone installieren.command`, `START_GRAUZONE.command`, `starten.command`, `setup_project.py`: Einrichtung und Start aus dem Quellcode.
-- Nicht an 0.3.0 angepasst: `run_app.py`, `hooks/`, `evaluate_system.py`, `generate_train_data.py`, `design.md`.
+- Am 2026-11-12 entfernt (seit 0.3.0 nicht gepflegt, Wiederherstellung über die Git-Historie): `run_app.py`, `hooks/` (PyInstaller-Weg), `evaluate_system.py`, `generate_train_data.py`, `design.md`.
 
 Datenfluss: Das PDF wird im Speicher geöffnet. `scanne` holt je Seite Wörter mit Position aus der Textebene; bei weniger als drei Wörtern oder erzwungener Texterkennung per EasyOCR. `finde` sucht im zusammengesetzten Seitentext Fundstellen (spaCy, Regex-Muster, Vornamenliste, Blacklist) und bildet sie auf Wörter ab. Beim Export schwärzt `wort_rechteck` nur die betroffenen Wortteile aller gescannten Seiten; nicht gescannte Seiten werden vorher gemeldet.
 
@@ -56,7 +56,7 @@ Festlegungen:
 Projektvorgaben des Nutzers:
 - Ausschließlich lokale Verarbeitung, keine Cloud-Dienste, keine Telemetrie. Einzige Ausnahme (vom Nutzer gewählt am 2026-11-11): Die Mac-App fragt beim Start die neueste Versionsnummer bei GitHub ab, installiert nur nach Rückfrage, abschaltbar.
 - Oberfläche, Code-Kommentare und Bezeichner auf Deutsch.
-- Zielhardware laut `design.md`: Apple Silicon (MacBook Air M2, 8 GB) (rekonstruiert).
+- Zielhardware: Apple Silicon (MacBook Air M2, 8 GB); stand ursprünglich in `design.md` (entfernt, rekonstruiert).
 - Nur erfundene Testdaten (z. B. „Erika Mustermann, Musterstadt“).
 - Lizenz MIT.
 
@@ -117,7 +117,7 @@ Verworfene Ansätze:
 |---|---|
 | `spacy.cli.download` zur Laufzeit in `load_nlp` (344b23c) | Fehler 404 unter spaCy 3.5, Netzwerkzugriff zur Laufzeit widerspricht dem Lokalprinzip |
 | DMG im Repository unter `download/` (56b6f82) | Binärdatei im Verlauf; ersetzt durch Release-Anhang (a29a826) |
-| PyInstaller-Bundle (`run_app.py`, `hooks/`) | Nicht getestet; würde PyMuPDF (AGPL) mitliefern (rekonstruiert aus UEBERGABE.md) |
+| PyInstaller-Bundle (`run_app.py`, `hooks/`, am 2026-11-12 entfernt) | Nicht getestet; würde PyMuPDF (AGPL) mitliefern (rekonstruiert aus UEBERGABE.md) |
 
 ## 4. Offene Aufgaben
 
@@ -136,7 +136,6 @@ Verworfene Ansätze:
 - [ ] Whitelist gilt global; versehentlich abgewählte Nachnamen werden in allen Dokumenten übersehen (mittel)
 - [ ] Windows und Gatekeeper-Dialog nach echtem Download testen (mittel)
 - [ ] OCR-Dauer von etwa 15 bis 20 s pro Scan-Seite auf der CPU (niedrig)
-- [ ] Alte Dateien (`evaluate_system.py`, `generate_train_data.py`, `design.md`, PyInstaller-Weg) anpassen oder entfernen (niedrig)
 - [ ] Notarisierung, erfordert Apple-Entwicklerkonto (niedrig)
 
 ### Nächster konkreter Schritt

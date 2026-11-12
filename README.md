@@ -92,28 +92,6 @@ python -m streamlit run app.py
 
 ---
 
-## 📦 Paketierung als Desktop-App (.app / .exe)
-
-Für Rechner ohne Python lässt sich mit PyInstaller eine eigenständige App bauen (im aktivierten `venv`):
-
-```bash
-pip install pyinstaller
-python -m PyInstaller --noconfirm --onefile --windowed \
-  --additional-hooks-dir=./hooks \
-  --collect-all easyocr \
-  --collect-all spacy \
-  --collect-all de_core_news_lg \
-  --add-data "app.py:." \
-  --add-data "erkennung.py:." \
-  --add-data "vornamen.txt:." \
-  --add-data "knowledge_base.json:." \
-  run_app.py
-```
-
-Die fertige App liegt danach im Ordner `dist/`. `vornamen.txt` und `knowledge_base.json` müssen dafür vorhanden sein.
-
----
-
 ## 📂 Projektstruktur
 
 | Datei | Zweck |
@@ -125,9 +103,8 @@ Die fertige App liegt danach im Ordner `dist/`. `vornamen.txt` und `knowledge_ba
 | `app.py` | Hauptanwendung (Streamlit-Oberfläche) |
 | `erkennung.py` | Erkennung der Fundstellen auf Wortebene (ohne Oberfläche, einzeln testbar) |
 | `requirements.txt` | Benötigte Bibliotheken |
+| `tests/` | Automatische Tests (`./venv/bin/python -m unittest discover -s tests`) |
 | `setup_project.py` | Einfaches Installationsskript (Bibliotheken + kleines Sprachmodell) |
-| `run_app.py` | Starter für die PyInstaller-App |
-| `hooks/` | Konfiguration für den PyInstaller-Build |
 | `.streamlit/config.toml` | Schaltet die Nutzungsstatistik von Streamlit ab |
 | `vornamen.txt` | Vornamenliste für die Namenserkennung (lokal, nicht im Repository) |
 | `knowledge_base.json` | Gelernte Begriffe (lokal, nicht im Repository) |

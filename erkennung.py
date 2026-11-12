@@ -41,6 +41,7 @@ class Fund:
     woerter: list[int] = field(default_factory=list)
     start: int = 0
     ende: int = 0
+    quellen: tuple[str, ...] = ()              # wodurch erkannt, siehe BEGRUENDUNG
 
 
 ARTEN = {
@@ -153,6 +154,32 @@ MUSTER = [
         r"|\b(?:Am|An der|Auf dem|Im|In der|Zum|Zur)[ \t]+[A-ZÄÖÜ][\wäöüß\-]+[ \t]+\d+[ \t]?[a-zA-Z]?\b")),
 ]
 SPACY_ARTEN = {"PER": "PER", "LOC": "ORT", "ORG": "ORG"}
+# Quelle je Muster (gleiche Reihenfolge wie MUSTER)
+MUSTER_QUELLEN = ["ANREDE", "FELD", "UMBRUCH", "TEL", "MAIL", "IBAN", "PLZ", "STRASSE"]
+
+# Warum eine Stelle als personenbezogen gilt (für die Fundstellenkarten)
+BEGRUENDUNG = {
+    "MODELL_PER": "Sprachmodell: Name einer Person",
+    "MODELL_ORT": "Sprachmodell: Ort",
+    "MODELL_ORG": "Sprachmodell: Organisation oder Institution",
+    "ANREDE": "Name nach Anrede (Frau, Herr)",
+    "FELD": "Name nach Feldbezeichnung (Absender:, Name: …)",
+    "UMBRUCH": "Name nach Anrede, über Zeilenumbruch",
+    "TEL": "Muster Telefon- oder Faxnummer",
+    "MAIL": "Muster E-Mail-Adresse",
+    "MAIL_OCR": "Wort mit @, E-Mail aus Texterkennung",
+    "IBAN": "IBAN, Prüfziffer gültig",
+    "IBAN_UNSICHER": "IBAN-ähnlich, Prüfziffer nicht bestätigt",
+    "PLZ": "Postleitzahl mit Ort",
+    "STRASSE": "Straße mit Hausnummer",
+    "VORNAME": "Vorname aus der Vornamenliste",
+    "LISTE": "gelernt: immer schwärzen",
+}
+# Quellen, die für sich allein eindeutig sind. Alle anderen (Sprachmodell, Vornamenliste,
+# E-Mail aus Texterkennung, IBAN ohne gültige Prüfziffer) gelten als „zu prüfen“, solange
+# nicht zwei verschiedene Quellen dieselbe Stelle finden. Keine Prozentwerte: spaCy
+# liefert keine verlässlichen Wahrscheinlichkeiten.
+EINDEUTIG = {"ANREDE", "FELD", "UMBRUCH", "TEL", "MAIL", "IBAN", "PLZ", "STRASSE", "LISTE"}
 # Großgeschriebene Wörter, die am Zeilenanfang folgen können und keine Namen sind
 NICHT_NAME = {
     "Ihr", "Ihre", "Ihren", "Ihrem", "Ihrer", "Ihres", "Sie", "Der", "Die", "Das", "Den", "Dem",
@@ -178,8 +205,29 @@ def _ist_iban(s: str) -> bool:
     return len(n) >= 15 and sum(c.isdigit() for c in n) >= 12 and n[2:4].isdigit()
 
 
+def _iban_pruefziffer_ok(s: str) -> bool:
+    """Prüfziffer nach ISO 13616 (Modulo 97), nach Ersatz typischer OCR-Verwechslungen."""
+    z = re.sub(r"\s+", "", s)
+    n = (z[:2] + z[2:].translate(_OCR_ZIFFER)).upper()
+    if not re.fullmatch(r"[A-Z]{2}\d{2}[A-Z0-9]{11,30}", n):
+        return False
+    umgestellt = n[4:] + n[:4]
+    return int("".join(str(int(c, 36)) for c in umgestellt)) % 97 == 1
+
+
+def begruendung(fund: Fund) -> list[str]:
+    """Lesbare Gründe, warum die Stelle gefunden wurde."""
+    return [BEGRUENDUNG.get(q, q) for q in fund.quellen]
+
+
+def ist_eindeutig(fund: Fund) -> bool:
+    """Eindeutig: eine für sich sichere Quelle oder zwei verschiedene Quellen.
+    Sonst gehört die Stelle in „zu prüfen“."""
+    return bool(EINDEUTIG & set(fund.quellen)) or len(set(fund.quellen)) >= 2
+
+
 def finde(text: str, woerter: list[Wort], nlp, vornamen: set[str], gelernt: list[str]) -> list[Fund]:
-    spans: list[tuple[int, int, str]] = []
+    spans: list[tuple[int, int, str, str]] = []   # Anfang, Ende, Art, Quelle
 
     if nlp is not None:
         for ent in nlp(text).ents:
@@ -190,11 +238,12 @@ def finde(text: str, woerter: list[Wort], nlp, vornamen: set[str], gelernt: list
             # Absender und Anschrift als eine Stelle)
             pos = ent.start_char
             for teil in text[ent.start_char:ent.end_char].split("\n"):
-                spans.append((pos, pos + len(teil), art))
+                spans.append((pos, pos + len(teil), art, f"MODELL_{art}"))
                 pos += len(teil) + 1
 
-    for art, rx in MUSTER:
+    for (art, rx), quelle_muster in zip(MUSTER, MUSTER_QUELLEN):
         for m in rx.finditer(text):
+            quelle = quelle_muster
             gruppe = 1 if m.lastindex else 0
             s, e = m.span(gruppe)
             if art == "PER_FELD":
@@ -205,11 +254,14 @@ def finde(text: str, woerter: list[Wort], nlp, vornamen: set[str], gelernt: list
                 if m.group(1) in NICHT_NAME:
                     continue
                 art = "PER"
-            if art == "IBAN" and not _ist_iban(m.group(0)):
-                continue
+            if art == "IBAN":
+                if not _ist_iban(m.group(0)):
+                    continue
+                if not _iban_pruefziffer_ok(m.group(0)):
+                    quelle = "IBAN_UNSICHER"
             if art == "TEL" and (_ist_datum(m.group(0)) or sum(c.isdigit() for c in m.group(0)) < 6):
                 continue
-            spans.append((s, e, art))
+            spans.append((s, e, art, quelle))
 
     # E-Mail-Adressen nach Texterkennung: Wort mit "@" immer ganz erfassen; fehlt der
     # Punkt vor der Endung ("example org"), die Endung als Folgewort anhängen
@@ -220,7 +272,7 @@ def finde(text: str, woerter: list[Wort], nlp, vornamen: set[str], gelernt: list
                     and re.fullmatch(r"[a-z]{2,4}[.,;:]?", woerter[i + 1].text) \
                     and text[w.ende:woerter[i + 1].start].strip() == "":
                 ende = woerter[i + 1].ende
-            spans.append((w.start, ende, "MAIL"))
+            spans.append((w.start, ende, "MAIL", "MAIL_OCR"))
 
     # Vornamenliste: Vorname + folgendes großgeschriebenes Wort
     for i, w in enumerate(woerter):
@@ -229,18 +281,18 @@ def finde(text: str, woerter: list[Wort], nlp, vornamen: set[str], gelernt: list
             if i + 1 < len(woerter) and re.fullmatch(GROSS + r"[.,;:]?", woerter[i + 1].text) \
                     and text[w.ende:woerter[i + 1].start].strip() == "":
                 ende = woerter[i + 1].ende
-            spans.append((w.start, ende, "PER"))
+            spans.append((w.start, ende, "PER", "VORNAME"))
 
     # Gelernte Begriffe (Blacklist)
     for begriff in gelernt:
         if len(begriff.strip()) < 2:
             continue
         for m in re.finditer(r"(?<!\w)" + re.escape(begriff.strip()) + r"(?!\w)", text, re.IGNORECASE):
-            spans.append((m.start(), m.end(), "LISTE"))
+            spans.append((m.start(), m.end(), "LISTE", "LISTE"))
 
     # Satzzeichen am Rand abschneiden, überlappende Stellen zusammenfassen
     bereinigt = []
-    for s, e, art in spans:
+    for s, e, art, quelle in spans:
         while s < e and text[s] in " \t\n.,;:()\"'":
             s += 1
         while e > s and text[e - 1] in " \t\n.,;:()\"'":
@@ -250,24 +302,29 @@ def finde(text: str, woerter: list[Wort], nlp, vornamen: set[str], gelernt: list
             if m and m.end() < e:
                 s = m.end()
         if e > s:
-            bereinigt.append((s, e, art))
+            bereinigt.append((s, e, art, quelle))
     bereinigt.sort()
     zusammen: list[list] = []
     rang = ["LISTE", "IBAN", "MAIL", "TEL", "PER", "ADR", "ORT", "ORG"]
-    for s, e, art in bereinigt:
+    for s, e, art, quelle in bereinigt:
         if zusammen and s < zusammen[-1][1]:
             letzte = zusammen[-1]
             letzte[1] = max(letzte[1], e)
             if rang.index(art) < rang.index(letzte[2]):
                 letzte[2] = art
+            letzte[3].append((quelle, art, s, e))
         else:
-            zusammen.append([s, e, art])
+            zusammen.append([s, e, art, [(quelle, art, s, e)]])
 
     funde = []
-    for s, e, art in zusammen:
+    for s, e, art, paare in zusammen:
         idx = [i for i, w in enumerate(woerter) if w.start < e and w.ende > s]
         if idx:
-            funde.append(Fund(text[s:e].replace("\n", " "), art, idx, s, e))
+            # Als Grund zählt eine Quelle der endgültigen Art oder eine, die die ganze Stelle
+            # abdeckt (eine Telefonnummer-Teilfolge in einer IBAN begründet die IBAN nicht)
+            quellen = tuple(dict.fromkeys(
+                q for q, a, qs, qe in paare if a == art or (qs <= s and qe >= e)))
+            funde.append(Fund(text[s:e].replace("\n", " "), art, idx, s, e, quellen))
     return funde
 
 

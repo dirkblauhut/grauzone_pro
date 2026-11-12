@@ -112,6 +112,42 @@ class AppDurchlauf(unittest.TestCase):
         self.assertIn("1 freigegeben", legende)
         self.assertIsNone(at.session_state.export, "alter Export passt nicht mehr zur Auswahl")
 
+    def test_sammelaktion_gilt_fuer_alle_seiten_und_lernt_nicht(self):
+        at = self.at
+        knopf(at, "Alle freigeben").click().run()
+        self.assertEqual([], [str(e.value) for e in at.exception])
+        self.assertEqual([], at.session_state.kb["whitelist"], "Sammelaktion darf nichts lernen")
+        self.assertTrue(at.session_state.auswahl)
+        self.assertFalse(any(at.session_state.auswahl.values()), "alle Seiten freigegeben")
+        self.assertFalse(any(c.value for c in at.checkbox))
+        knopf(at, "Alle schwärzen").click().run()
+        self.assertTrue(all(at.session_state.auswahl.values()))
+        self.assertTrue(all(c.value for c in at.checkbox))
+
+    def test_haken_von_hand_lernt(self):
+        at = self.at
+        name = at.checkbox[0].label.strip("*")
+        at.checkbox[0].uncheck().run()
+        self.assertIn(name, at.session_state.kb["whitelist"])
+
+    def test_suche_filtert_fundstellen(self):
+        at = self.at
+        at.text_input(key="suche").input("0221").run()
+        self.assertEqual([], [str(e.value) for e in at.exception])
+        self.assertEqual(["**0221 1234567**"], [c.label for c in at.checkbox])
+        self.assertIn("Alle freigeben (1)", knopf(at, "Alle freigeben").label)
+
+    def test_ansicht_ergebnis_zeigt_geschwaerztes_pdf(self):
+        at = self.at
+        for ansicht in ("Ergebnis", "Beide"):
+            at.session_state.ansicht = ansicht
+            at.run()
+            self.assertEqual([], [str(e.value) for e in at.exception])
+        _, erg = at.session_state.ergebnis
+        text = "".join(p.get_text() for p in erg)
+        self.assertNotIn("Mustermann", text)
+        self.assertIn("Sehr geehrte Frau", text)
+
 
 if __name__ == "__main__":
     unittest.main()

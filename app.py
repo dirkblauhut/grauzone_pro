@@ -1,4 +1,5 @@
 import base64
+import hashlib
 import io
 import json
 import os
@@ -137,6 +138,22 @@ def rechtecke(p, fund):
     return [E.wort_rechteck(woerter[i], fund) for i in fund.woerter]
 
 
+GRUPPEN = {"Alle": None, "Personen": {"PER"}, "Kontakte": {"TEL", "MAIL", "ADR"},
+           "Weitere": {"ORT", "ORG", "IBAN", "LISTE"}}
+
+
+def passt(fund, gruppe, suche):
+    """Fundstelle passt zu Filter und Suchbegriff."""
+    arten = GRUPPEN.get(gruppe)
+    return (arten is None or fund.art in arten) and (not suche or suche.lower() in fund.text.lower())
+
+
+def zu_schwaerzen():
+    """Rechtecke aller gewählten Fundstellen je gescannter Seite (Export und Ergebnisansicht)."""
+    return {p: [r for fund in funde_der_seite(p) if ist_gewaehlt(p, fund) for r in rechtecke(p, fund)]
+            for p in sorted(st.session_state.woerter)}
+
+
 oeffne_pdf = E.oeffne_pdf   # Formularfelder und Anmerkungen fest in die Seite (siehe erkennung.py)
 
 
@@ -160,6 +177,37 @@ def vorschau(doc, datei_id, p, zoom):
                 else:
                     draw.rectangle(box, outline=(150, 150, 150, 255), width=1)
     return bild
+
+
+def ergebnis_doc():
+    """Das geschwärzte PDF zur aktuellen Auswahl (für die Ansicht „Ergebnis“). Wird nur neu
+    erzeugt, wenn sich Datei oder Balken ändern; Schlüssel ist ein Hash der Rechtecke."""
+    balken = zu_schwaerzen()
+    schluessel = (datei_id, hashlib.sha256(repr(sorted(balken.items())).encode()).hexdigest()[:16])
+    gespeichert = st.session_state.get("ergebnis")
+    if not gespeichert or gespeichert[0] != schluessel:
+        daten, _ = E.schwaerze(file_content, balken)
+        gespeichert = (schluessel, pymupdf.open(stream=daten, filetype="pdf"))
+        st.session_state.ergebnis = gespeichert
+    return gespeichert
+
+
+def seitenansicht(p, aufloesung):
+    """Seite p je nach Ansicht: Original mit Markierungen, Ergebnis (geschwärzt) oder beide."""
+    ansicht = st.session_state.ansicht
+    if ansicht != "Original":
+        schluessel, erg = ergebnis_doc()
+        ergebnis = seitenbild(erg, ("ergebnis",) + schluessel, p, aufloesung)
+    if ansicht == "Original":
+        st.image(vorschau(doc, datei_id, p, aufloesung), width="stretch")
+    elif ansicht == "Ergebnis":
+        st.image(ergebnis, width="stretch")
+    else:
+        links, rechts = st.columns(2, gap="small")
+        links.caption("Original")
+        links.image(vorschau(doc, datei_id, p, aufloesung), width="stretch")
+        rechts.caption("Ergebnis")
+        rechts.image(ergebnis, width="stretch")
 
 
 def gehe_zu(seite):
@@ -221,6 +269,9 @@ header[data-testid="stHeader"] { display:none; }
 [class*="st-key-fund_aus"] { border-left:4px solid var(--gz-grau) !important; background:#f9fafb; }
 [class*="st-key-fund_"] { border-radius:10px; }
 .gz-art { display:inline-block; font-size:.75rem; color:var(--gz-text2); }
+.gz-grund { font-size:.75rem; color:#475467; }
+.gz-pruefen { background:#fef0c7; color:#93370d; border-radius:4px; padding:0 .3rem; font-weight:600; }
+.gz-gruppe { font-size:.78rem; font-weight:650; color:#344054; margin:.3rem 0 .1rem 0; }
 [class*="st-key-fund_"] { gap:0 !important; padding:.45rem .7rem !important; }
 [class*="st-key-karte"] { gap:.55rem; }
 [data-testid="stButtonGroup"] button { padding:.15rem .55rem; min-height:1.9rem; font-size:.8rem; }
@@ -309,6 +360,7 @@ if uploaded_file is not None and uploaded_file.name != st.session_state.last_upl
     st.session_state.funde_speicher = {}
     st.session_state.seite = 1
     st.session_state.gezeigt = None
+    st.session_state.ergebnis = None
     st.rerun()
 
 if not uploaded_file:
@@ -336,13 +388,40 @@ n = len(doc)
 datei_id = (uploaded_file.name, len(file_content))
 if not 1 <= st.session_state.get("seite", 1) <= n:
     st.session_state.seite = 1
-for key, start in [("zoom", 1.0), ("alle_zeigen", n > 1), ("filter", "Alle")]:
+for key, start in [("zoom", 1.0), ("alle_zeigen", n > 1), ("filter", "Alle"), ("ansicht", "Original")]:
     st.session_state.setdefault(key, start)
 p_id = st.session_state.seite - 1
 
 
 def haken_key(p, i, fund):
     return f"cb_{uploaded_file.name}_{p}_{i}_{fund.text}"
+
+
+def haken_geaendert(p, fund, key):
+    """Haken von Hand gesetzt oder entfernt. Nur hier wird gelernt: abgewählt -> nie
+    schwärzen; wieder gewählt -> Eintrag entfernen. Sammelaktionen lernen nicht."""
+    wert = st.session_state[key]
+    st.session_state.auswahl[(p, fund.text.lower())] = wert
+    st.session_state.export = None
+    if not wert and not in_liste(fund.text, kb["whitelist"]):
+        kb["whitelist"].append(fund.text)
+        save_knowledge(kb)
+    elif wert and in_liste(fund.text, kb["whitelist"]):
+        kb["whitelist"] = [x for x in kb["whitelist"] if x.lower() != fund.text.lower()]
+        save_knowledge(kb)
+
+
+def sammelaktion(wert, gruppe, suche):
+    """Alle zu Filter und Suche passenden Fundstellen aller gescannten Seiten schwärzen
+    (wert=True) oder freigeben. Gilt nur für dieses Dokument; die Wissensbasis bleibt
+    unverändert, sonst landeten mit einem Klick viele Begriffe dauerhaft in „nie schwärzen“."""
+    for p in st.session_state.woerter:
+        for i, fund in enumerate(funde_der_seite(p)):
+            if passt(fund, gruppe, suche):
+                st.session_state.auswahl[(p, fund.text.lower())] = wert
+                # Checkbox übernimmt den Wert beim nächsten Zeichnen aus auswahl
+                st.session_state.pop(haken_key(p, i, fund), None)
+    st.session_state.export = None
 
 
 # Haken der Fundstellen-Liste übernehmen, bevor Liste, Vorschau und Zähler gezeichnet
@@ -420,8 +499,6 @@ with col_l:
 # Steht im Skript vor der Mittelspalte: Die Vorschau zeichnet bei vielen Seiten lange, und Streamlit
 # zeigt Elemente in der Reihenfolge des Skripts. So erscheint die Fundstellenliste sofort.
 funde = funde_der_seite(p_id)
-GRUPPEN = {"Alle": None, "Personen": {"PER"}, "Kontakte": {"TEL", "MAIL", "ADR"},
-           "Weitere": {"ORT", "ORG", "IBAN", "LISTE"}}
 
 with col_r:
     with st.container(border=True, key="karte_funde"):
@@ -430,36 +507,71 @@ with col_r:
             st.info("Diese Seite wurde noch nicht gescannt. Links **Alle Seiten scannen** wählen.")
         else:
             quelle = st.session_state.woerter[p_id]["quelle"]
-            anzahl_je = {g: sum(1 for f in funde if arten is None or f.art in arten)
-                         for g, arten in GRUPPEN.items()}
+            suche = st.text_input("Suchen", key="suche", placeholder="🔎 Fundstellen suchen",
+                                  label_visibility="collapsed",
+                                  help="Sucht in den Fundstellen aller gescannten Seiten.").strip()
+            anzahl_je = {g: sum(1 for f in funde if passt(f, g, suche)) for g in GRUPPEN}
             gruppe = st.segmented_control(
                 "Filter", list(GRUPPEN), key="filter", label_visibility="collapsed",
                 format_func=lambda g: f"{g} ({anzahl_je[g]})") or "Alle"
+            im_dokument = sum(1 for p in st.session_state.woerter for f in funde_der_seite(p)
+                              if passt(f, gruppe, suche))
+            hilfe = (f"Gilt für alle {im_dokument} passenden Fundstellen auf allen gescannten Seiten "
+                     "(Filter und Suche). Wird nur für dieses Dokument übernommen, nicht gelernt.")
+            s1, s2 = st.columns(2)
+            s1.button(f"Alle schwärzen ({im_dokument})", key="alle_an", on_click=sammelaktion,
+                      args=(True, gruppe, suche), disabled=not im_dokument, help=hilfe, width="stretch")
+            s2.button(f"Alle freigeben ({im_dokument})", key="alle_aus", on_click=sammelaktion,
+                      args=(False, gruppe, suche), disabled=not im_dokument, help=hilfe, width="stretch")
+            if suche:
+                andere = {p + 1: sum(1 for f in funde_der_seite(p) if passt(f, gruppe, suche))
+                          for p in sorted(st.session_state.woerter) if p != p_id}
+                andere = {s_: k for s_, k in andere.items() if k}
+                if andere:
+                    st.caption("Weitere Treffer: " + ", ".join(f"Seite {s_} ({k})" for s_, k in andere.items()))
+                    sprung = st.columns(min(len(andere), 6))
+                    for nr, s_ in enumerate(list(andere)[:6]):
+                        sprung[nr].button(f"S. {s_}", key=f"sprung_{s_}", on_click=gehe_zu, args=(s_,),
+                                          type="tertiary", width="stretch")
+                if not im_dokument:
+                    im_text = [p + 1 for p in sorted(st.session_state.woerter)
+                               if suche.lower() in st.session_state.woerter[p]["text"].lower()]
+                    if im_text:
+                        st.caption(f"„{suche}“ steht im Text (Seite {', '.join(map(str, im_text))}), "
+                                   "ist aber keine Fundstelle. Unten über „Fehlt etwas?“ hinzufügen.")
             st.caption(f"gelesen per {quelle} · Haken = wird geschwärzt")
+            # Prüfwarteschlange: zu prüfende Stellen zuerst, dann eindeutige, je in Textreihenfolge.
+            # i bleibt die Nummer in der Fundliste (Checkbox-Schlüssel und Anzeige).
+            reihe = sorted(((i, f) for i, f in enumerate(funde) if passt(f, gruppe, suche)),
+                           key=lambda t: (E.ist_eindeutig(t[1]), t[1].start))
+            zu_pruefen = sum(1 for _, f in reihe if not E.ist_eindeutig(f))
             with st.container(height=300, border=False):
                 if not funde:
                     st.caption("Keine personenbezogenen Daten erkannt.")
-                for i, fund in enumerate(funde):
-                    if GRUPPEN[gruppe] is not None and fund.art not in GRUPPEN[gruppe]:
-                        continue
-                    vorgabe = not in_liste(fund.text, kb["whitelist"])
+                elif not reihe:
+                    st.caption("Keine Fundstellen zu Filter und Suche auf dieser Seite.")
+                for nr, (i, fund) in enumerate(reihe):
+                    eindeutig = E.ist_eindeutig(fund)
+                    if nr == 0 and zu_pruefen:
+                        st.markdown(f"<div class='gz-gruppe'>⚠ Zu prüfen ({zu_pruefen})</div>", unsafe_allow_html=True)
+                    if nr == zu_pruefen and eindeutig:
+                        st.markdown(f"<div class='gz-gruppe'>Eindeutig ({len(reihe) - zu_pruefen})</div>",
+                                    unsafe_allow_html=True)
                     gewaehlt = ist_gewaehlt(p_id, fund)
                     with st.container(border=True, key=f"fund_{'an' if gewaehlt else 'aus'}_{p_id}_{i}"):
-                        wert = st.checkbox(
-                            f"**{fund.text}**",
-                            value=gewaehlt,
-                            key=haken_key(p_id, i, fund),
-                        )
-                        st.markdown(f"<span class='gz-art'>{i + 1} · {E.ARTEN.get(fund.art, fund.art)} · "
-                                    f"Seite {p_id + 1}</span>", unsafe_allow_html=True)
+                        key = haken_key(p_id, i, fund)
+                        # Wert über den Schlüssel setzen, nicht über value=: Nur so übernimmt auch
+                        # der Browser eine Sammelaktion (sonst bleibt der alte Haken sichtbar)
+                        if st.session_state.get(key) != gewaehlt:
+                            st.session_state[key] = gewaehlt
+                        wert = st.checkbox(f"**{fund.text}**", key=key,
+                                           on_change=haken_geaendert, args=(p_id, fund, key))
+                        marke = "" if eindeutig else "<span class='gz-pruefen'>prüfen</span> "
+                        gruende = " · ".join(E.begruendung(fund)) or E.ARTEN.get(fund.art, fund.art)
+                        st.markdown(f"<span class='gz-art'>{marke}{i + 1} · {E.ARTEN.get(fund.art, fund.art)}"
+                                    f"</span><br><span class='gz-grund'>{gruende}</span>",
+                                    unsafe_allow_html=True)
                     st.session_state.auswahl[(p_id, fund.text.lower())] = wert
-                    # Lernen: abgewählt -> nie schwärzen; wieder gewählt -> Eintrag entfernen
-                    if not wert and vorgabe and not in_liste(fund.text, kb["whitelist"]):
-                        kb["whitelist"].append(fund.text)
-                        save_knowledge(kb)
-                    elif wert and not vorgabe:
-                        kb["whitelist"] = [x for x in kb["whitelist"] if x.lower() != fund.text.lower()]
-                        save_knowledge(kb)
 
             with st.form("zusatz", clear_on_submit=True, border=False):
                 zusatz = st.text_input(
@@ -484,12 +596,10 @@ with col_r:
             if offen:
                 st.warning(f"Nicht gescannt und daher **nicht geschwärzt**: Seite {', '.join(offen)}")
             if st.button("🔒 Schwärzen & exportieren", type="primary", width="stretch"):
-                zu_schwaerzen = {
-                    p: [r for fund in funde_der_seite(p) if ist_gewaehlt(p, fund) for r in rechtecke(p, fund)]
-                    for p in gescannt}
+                balken = zu_schwaerzen()
                 jetzt = datetime.now()
-                pdf_daten, anzahl = E.schwaerze(file_content, zu_schwaerzen)
-                meldungen = E.pruefe_export(pdf_daten, zu_schwaerzen)
+                pdf_daten, anzahl = E.schwaerze(file_content, balken)
+                meldungen = E.pruefe_export(pdf_daten, balken)
                 md, _ = E.markdown(
                     [(p, st.session_state.woerter[p]["text"], funde_der_seite(p)) for p in gescannt],
                     ist_gewaehlt,
@@ -546,6 +656,14 @@ with col_m:
         w[8].toggle("Alle Seiten", key="alle_zeigen", disabled=n == 1,
                     help="Alle Seiten untereinander zum Durchscrollen. Die Fundstellen rechts gehören "
                          "zur gewählten Seite; wählen per Pfeilen, Seitenzahl oder Seitenübersicht.")
+        st.segmented_control(
+            "Ansicht", ["Original", "Ergebnis", "Beide"], key="ansicht", label_visibility="collapsed",
+            help="Original: Fundstellen markiert (rot = wird geschwärzt). Ergebnis: so sieht das "
+                 "geschwärzte PDF mit der aktuellen Auswahl aus. Beide: nebeneinander zum Vergleich.")
+    if not st.session_state.ansicht:   # erneuter Klick hebt die Auswahl auf
+        st.session_state.ansicht = "Original"
+    if st.session_state.ansicht != "Original" and not st.session_state.woerter:
+        st.caption("Noch nichts gescannt: Das Ergebnis entspricht dem Original.")
 
     zoom = st.session_state.zoom
     aufloesung = 1.5 if zoom <= 1 else 2.5   # Pixel je PDF-Punkt; Anzeigegröße regelt der Zoom
@@ -566,14 +684,16 @@ with col_m:
                             unsafe_allow_html=True)
                 k2.button("Fundstellen", key=f"bearbeiten_{p}", on_click=gehe_zu, args=(p + 1,),
                           disabled=p == p_id, type="tertiary", width="stretch")
-                st.image(vorschau(doc, datei_id, p, aufloesung), width="stretch")
+                seitenansicht(p, aufloesung)
         # Bei Seitenwechsel (Pfeile, Seitenzahl, Schalter) die Vorschau zur Seite scrollen
         if st.session_state.get("gezeigt") not in (None, (p_id, True)):
             zur_seite_scrollen(p_id)
         st.session_state.gezeigt = (p_id, True)
     else:
         with st.container(key="einzeln"):
-            st.image(vorschau(doc, datei_id, p_id, aufloesung), width="stretch")
+            if st.session_state.ansicht != "Original" and p_id not in st.session_state.woerter:
+                st.warning("Seite nicht gescannt und daher im Ergebnis **nicht geschwärzt**.")
+            seitenansicht(p_id, aufloesung)
         st.session_state.gezeigt = (p_id, False)
 
     funde = funde_der_seite(p_id)
@@ -588,8 +708,14 @@ if not gescannt:
     status = "Dokument geladen. Noch nicht gescannt."
 else:
     gesamt = sum(len(funde_der_seite(p)) for p in gescannt)
+    pruefen_je = {p + 1: sum(1 for f in funde_der_seite(p) if not E.ist_eindeutig(f)) for p in gescannt}
+    pruefen_je = {s_: k for s_, k in pruefen_je.items() if k}
     status = (f"<span class='ok'>✔</span> Analyse: {len(gescannt)} von {n} Seite(n) gescannt, "
-              f"{gesamt} Fundstellen gefunden.")
+              f"{gesamt} Fundstellen gefunden")
+    if pruefen_je:
+        status += (f", davon {sum(pruefen_je.values())} zu prüfen (Seite "
+                   f"{', '.join(map(str, pruefen_je))})")
+    status += "."
     if offen:
         status += f" <span class='warn'>Nicht gescannt: Seite {', '.join(offen)}.</span>"
 st.markdown(f"<div class='gz-status'>{status}</div>", unsafe_allow_html=True)

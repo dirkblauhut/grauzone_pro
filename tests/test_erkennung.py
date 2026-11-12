@@ -133,5 +133,64 @@ class Markdown(unittest.TestCase):
         self.assertIn("Seite 2, 3", md)
 
 
+class _Ent:
+    def __init__(self, label, start, ende):
+        self.label_, self.start_char, self.end_char = label, start, ende
+
+
+class _Modell:
+    """Ersatz für spaCy: meldet vorgegebene Wörter als Entität (unabhängig vom Modell)."""
+    def __init__(self, **eintraege):
+        self.eintraege = eintraege
+
+    def __call__(self, text):
+        class Doc:
+            pass
+        d = Doc()
+        d.ents = [_Ent(label, text.index(wort), text.index(wort) + len(wort))
+                  for wort, label in self.eintraege.items() if wort in text]
+        return d
+
+
+def funde_mit(text, modell, vornamen=()):
+    t, woerter = E.seitentext(zeilen_aus(text))
+    return E.finde(t, woerter, modell, set(vornamen), [])
+
+
+def fund(fs, text):
+    return next(f for f in fs if f.text == text)
+
+
+class Begruendung(unittest.TestCase):
+    def test_anrede_ist_eindeutig_mit_grund(self):
+        f = fund(funde("Sehr geehrte Frau Erika Mustermann,"), "Erika Mustermann")
+        self.assertIn("ANREDE", f.quellen)
+        self.assertTrue(E.ist_eindeutig(f))
+        self.assertIn("Name nach Anrede (Frau, Herr)", E.begruendung(f))
+
+    def test_nur_sprachmodell_ist_zu_pruefen(self):
+        f = fund(funde_mit("Das Gutachten stammt von Musterfrau.", _Modell(Musterfrau="PER")), "Musterfrau")
+        self.assertEqual(("MODELL_PER",), f.quellen)
+        self.assertFalse(E.ist_eindeutig(f))
+
+    def test_zwei_quellen_sind_eindeutig(self):
+        f = fund(funde_mit("Gez. Erika Mustermann", _Modell(**{"Erika Mustermann": "PER"}), vornamen={"erika"}),
+                 "Erika Mustermann")
+        self.assertEqual({"MODELL_PER", "VORNAME"}, set(f.quellen))
+        self.assertTrue(E.ist_eindeutig(f))
+
+    def test_iban_pruefziffer(self):
+        gueltig = fund(funde("DE02 1203 0000 0000 2020 51"), "DE02 1203 0000 0000 2020 51")
+        falsch = fund(funde("DE03 1203 0000 0000 2020 51"), "DE03 1203 0000 0000 2020 51")
+        ocr = fund(funde("DEO2 1203 000o 000o 2020 51"), "DEO2 1203 000o 000o 2020 51")
+        self.assertEqual(("IBAN",), gueltig.quellen)
+        self.assertTrue(E.ist_eindeutig(gueltig))
+        self.assertTrue(E.ist_eindeutig(ocr), "OCR-Verwechslungen vor der Prüfziffer ersetzen")
+        # Die Teilfolge, die wie eine Telefonnummer aussieht, begründet die IBAN nicht
+        self.assertEqual(("IBAN_UNSICHER",), falsch.quellen)
+        self.assertFalse(E.ist_eindeutig(falsch))
+        self.assertEqual("IBAN", falsch.art, "auch ohne gültige Prüfziffer gefunden und geschwärzt")
+
+
 if __name__ == "__main__":
     unittest.main()

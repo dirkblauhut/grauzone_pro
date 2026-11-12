@@ -128,6 +128,11 @@ GROSS = r"[A-ZÄÖÜ][a-zäöüß]+(?:-[A-ZÄÖÜ][a-zäöüß]+)?"
 MUSTER = [
     # Anrede + Name: "Frau Erika Mustermann", "Herrn Dr. Thomas Beispiel"
     ("PER", re.compile(rf"\b(?:Herrn?|Frau|Fr\.|Hr\.)\s+(?:(?:Dr|Prof)\.\s+)*((?:{GROSS})(?:[ \t]+{GROSS}){{0,2}})")),
+    # Feldbezeichnung + Name: "Absender: Max Beispiel" (Prüfung auf Stoppwörter in finde)
+    ("PER_FELD", re.compile(
+        rf"\b(?:Absender(?:in)?|Empf\u00e4nger(?:in)?|Name|Vorname|Nachname|Antragsteller(?:in)?|"
+        rf"Ansprechpartner(?:in)?|Sachbearbeiter(?:in)?|Betroffene[rn]?|Kunde|Kundin)[ \t]*:[ \t]*"
+        rf"((?:{GROSS})(?:[ \t]+{GROSS}){{0,2}})")),
     # Name über Zeilenumbruch: "Herrn Max⏎Beispiel" (Folgewort wird in finde geprüft)
     ("PER_UMBRUCH", re.compile(rf"\b(?:Herrn?|Frau|Fr\.|Hr\.)[ \t]+(?:(?:Dr|Prof)\.[ \t]+)*(?:{GROSS})[ \t]*\n[ \t]*({GROSS})")),
     # Telefon/Fax: beginnt mit 0 oder +, mind. 6 Ziffern, keine Datumsangabe
@@ -188,6 +193,10 @@ def finde(text: str, woerter: list[Wort], nlp, vornamen: set[str], gelernt: list
         for m in rx.finditer(text):
             gruppe = 1 if m.lastindex else 0
             s, e = m.span(gruppe)
+            if art == "PER_FELD":
+                if m.group(1).split()[0] in NICHT_NAME:
+                    continue
+                art = "PER"
             if art == "PER_UMBRUCH":
                 if m.group(1) in NICHT_NAME:
                     continue

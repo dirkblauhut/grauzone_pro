@@ -345,8 +345,9 @@ def haken_key(p, i, fund):
     return f"cb_{uploaded_file.name}_{p}_{i}_{fund.text}"
 
 
-# Haken der Fundstellen-Liste übernehmen, bevor Vorschau und Zähler gezeichnet
-# werden: Die Liste steht rechts und wird erst nach der Vorschau ausgeführt.
+# Haken der Fundstellen-Liste übernehmen, bevor Liste, Vorschau und Zähler gezeichnet
+# werden (die Liste läuft im Skript zwar vor der Vorschau, die Haken sind aber schon
+# im Zustand der Checkbox-Schlüssel, bevor die Liste ihre Widgets erneut anlegt).
 for i, fund in enumerate(funde_der_seite(p_id)):
     if haken_key(p_id, i, fund) in st.session_state:
         neu = st.session_state[haken_key(p_id, i, fund)]
@@ -415,61 +416,10 @@ with col_l:
                         st.button(f"{zeichen}{p + 1}", key=f"mini_{p}", on_click=gehe_zu, args=(p + 1,),
                                   type="primary" if p == p_id else "secondary", width="stretch")
 
-# --- Mittlere Spalte: Werkzeugleiste und Vorschau ---
-with col_m:
-    with st.container(key="leiste"):
-        w = st.columns([0.7, 1.1, 0.9, 0.7, 0.4, 0.7, 0.9, 0.7, 2.2], vertical_alignment="center")
-        w[0].button("◀", on_click=gehe_zu, args=(p_id,), disabled=p_id == 0, help="Vorige Seite", width="stretch")
-        w[1].number_input("Seite", 1, n, key="seite", label_visibility="collapsed")
-        w[2].markdown(f"<div class='gz-mitte'>/ {n}</div>", unsafe_allow_html=True)
-        w[3].button("▶", on_click=gehe_zu, args=(p_id + 2,), disabled=p_id == n - 1, help="Nächste Seite",
-                    width="stretch")
-        w[5].button("−", on_click=zoom_aendern, args=(-0.25,), disabled=st.session_state.zoom <= 0.5,
-                    help="Verkleinern", width="stretch")
-        w[6].markdown(f"<div class='gz-mitte'>{st.session_state.zoom:.0%}</div>", unsafe_allow_html=True)
-        w[7].button("+", on_click=zoom_aendern, args=(0.25,), disabled=st.session_state.zoom >= 2.0,
-                    help="Vergrößern", width="stretch")
-        w[8].toggle("Alle Seiten", key="alle_zeigen", disabled=n == 1,
-                    help="Alle Seiten untereinander zum Durchscrollen. Die Fundstellen rechts gehören "
-                         "zur gewählten Seite; wählen per Pfeilen, Seitenzahl oder Seitenübersicht.")
-
-    zoom = st.session_state.zoom
-    aufloesung = 1.5 if zoom <= 1 else 2.5   # Pixel je PDF-Punkt; Anzeigegröße regelt der Zoom
-    # Zoom: Seiten breiter als die Spalte darstellen, dann seitlich scrollbar
-    st.markdown(f"<style>.st-key-vorschau [data-testid='stImage'] img, .st-key-einzeln [data-testid='stImage'] img"
-                f"{{width:{zoom * 100:.0f}% !important;max-width:none !important;}}"
-                ".st-key-vorschau,.st-key-einzeln{overflow-x:auto !important;}"
-                "div:has(>.st-key-vorschau){--h:max(400px,calc(100vh - 230px));"
-                "height:var(--h)!important;flex:0 0 var(--h)!important}</style>",
-                unsafe_allow_html=True)
-    if st.session_state.alle_zeigen and n > 1:
-        with st.container(height=800, key="vorschau"):
-            for p in range(n):
-                k1, k2 = st.columns([3, 1], vertical_alignment="center")
-                status = "gescannt" if p in st.session_state.woerter else "nicht gescannt"
-                k1.markdown(f"<span id='grauzone-seite-{p}'></span>"
-                            f"**{'▶ ' if p == p_id else ''}Seite {p + 1}** · <span class='gz-klein'>{status}</span>",
-                            unsafe_allow_html=True)
-                k2.button("Fundstellen", key=f"bearbeiten_{p}", on_click=gehe_zu, args=(p + 1,),
-                          disabled=p == p_id, type="tertiary", width="stretch")
-                st.image(vorschau(doc, datei_id, p, aufloesung), width="stretch")
-        # Bei Seitenwechsel (Pfeile, Seitenzahl, Schalter) die Vorschau zur Seite scrollen
-        if st.session_state.get("gezeigt") not in (None, (p_id, True)):
-            zur_seite_scrollen(p_id)
-        st.session_state.gezeigt = (p_id, True)
-    else:
-        with st.container(key="einzeln"):
-            st.image(vorschau(doc, datei_id, p_id, aufloesung), width="stretch")
-        st.session_state.gezeigt = (p_id, False)
-
-    funde = funde_der_seite(p_id)
-    aktiv = sum(ist_gewaehlt(p_id, f) for f in funde)
-    st.markdown(f"<div class='gz-legende'>Seite {p_id + 1}: {len(funde)} Fundstellen · "
-                f"<span class='rot'>●</span> {aktiv} wird geschwärzt · "
-                f"<span class='grau'>●</span> {len(funde) - aktiv} freigegeben</div>",
-                unsafe_allow_html=True)
-
 # --- Rechte Spalte: Fundstellen-Analyse und Export ---
+# Steht im Skript vor der Mittelspalte: Die Vorschau zeichnet bei vielen Seiten lange, und Streamlit
+# zeigt Elemente in der Reihenfolge des Skripts. So erscheint die Fundstellenliste sofort.
+funde = funde_der_seite(p_id)
 GRUPPEN = {"Alle": None, "Personen": {"PER"}, "Kontakte": {"TEL", "MAIL", "ADR"},
            "Weitere": {"ORT", "ORG", "IBAN", "LISTE"}}
 
@@ -572,6 +522,60 @@ with col_r:
                                    mime="text/markdown", width="stretch",
                                    help="Prüfprotokoll ohne Originaldaten: Kennung (Hash), Zahlen je Art, "
                                         "Ergebnis der Exportprüfung. Der Dateiname enthält nicht den Namen des Dokuments.")
+
+# --- Mittlere Spalte: Werkzeugleiste und Vorschau ---
+with col_m:
+    with st.container(key="leiste"):
+        w = st.columns([0.7, 1.1, 0.9, 0.7, 0.4, 0.7, 0.9, 0.7, 2.2], vertical_alignment="center")
+        w[0].button("◀", on_click=gehe_zu, args=(p_id,), disabled=p_id == 0, help="Vorige Seite", width="stretch")
+        w[1].number_input("Seite", 1, n, key="seite", label_visibility="collapsed")
+        w[2].markdown(f"<div class='gz-mitte'>/ {n}</div>", unsafe_allow_html=True)
+        w[3].button("▶", on_click=gehe_zu, args=(p_id + 2,), disabled=p_id == n - 1, help="Nächste Seite",
+                    width="stretch")
+        w[5].button("−", on_click=zoom_aendern, args=(-0.25,), disabled=st.session_state.zoom <= 0.5,
+                    help="Verkleinern", width="stretch")
+        w[6].markdown(f"<div class='gz-mitte'>{st.session_state.zoom:.0%}</div>", unsafe_allow_html=True)
+        w[7].button("+", on_click=zoom_aendern, args=(0.25,), disabled=st.session_state.zoom >= 2.0,
+                    help="Vergrößern", width="stretch")
+        w[8].toggle("Alle Seiten", key="alle_zeigen", disabled=n == 1,
+                    help="Alle Seiten untereinander zum Durchscrollen. Die Fundstellen rechts gehören "
+                         "zur gewählten Seite; wählen per Pfeilen, Seitenzahl oder Seitenübersicht.")
+
+    zoom = st.session_state.zoom
+    aufloesung = 1.5 if zoom <= 1 else 2.5   # Pixel je PDF-Punkt; Anzeigegröße regelt der Zoom
+    # Zoom: Seiten breiter als die Spalte darstellen, dann seitlich scrollbar
+    st.markdown(f"<style>.st-key-vorschau [data-testid='stImage'] img, .st-key-einzeln [data-testid='stImage'] img"
+                f"{{width:{zoom * 100:.0f}% !important;max-width:none !important;}}"
+                ".st-key-vorschau,.st-key-einzeln{overflow-x:auto !important;}"
+                "div:has(>.st-key-vorschau){--h:max(400px,calc(100vh - 230px));"
+                "height:var(--h)!important;flex:0 0 var(--h)!important}</style>",
+                unsafe_allow_html=True)
+    if st.session_state.alle_zeigen and n > 1:
+        with st.container(height=800, key="vorschau"):
+            for p in range(n):
+                k1, k2 = st.columns([3, 1], vertical_alignment="center")
+                status = "gescannt" if p in st.session_state.woerter else "nicht gescannt"
+                k1.markdown(f"<span id='grauzone-seite-{p}'></span>"
+                            f"**{'▶ ' if p == p_id else ''}Seite {p + 1}** · <span class='gz-klein'>{status}</span>",
+                            unsafe_allow_html=True)
+                k2.button("Fundstellen", key=f"bearbeiten_{p}", on_click=gehe_zu, args=(p + 1,),
+                          disabled=p == p_id, type="tertiary", width="stretch")
+                st.image(vorschau(doc, datei_id, p, aufloesung), width="stretch")
+        # Bei Seitenwechsel (Pfeile, Seitenzahl, Schalter) die Vorschau zur Seite scrollen
+        if st.session_state.get("gezeigt") not in (None, (p_id, True)):
+            zur_seite_scrollen(p_id)
+        st.session_state.gezeigt = (p_id, True)
+    else:
+        with st.container(key="einzeln"):
+            st.image(vorschau(doc, datei_id, p_id, aufloesung), width="stretch")
+        st.session_state.gezeigt = (p_id, False)
+
+    funde = funde_der_seite(p_id)
+    aktiv = sum(ist_gewaehlt(p_id, f) for f in funde)
+    st.markdown(f"<div class='gz-legende'>Seite {p_id + 1}: {len(funde)} Fundstellen · "
+                f"<span class='rot'>●</span> {aktiv} wird geschwärzt · "
+                f"<span class='grau'>●</span> {len(funde) - aktiv} freigegeben</div>",
+                unsafe_allow_html=True)
 
 # --- Statuszeile ---
 if not gescannt:

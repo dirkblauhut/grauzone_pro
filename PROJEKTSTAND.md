@@ -1,6 +1,6 @@
 # Projektstand: Grauzone PRO
 
-Stand: 2026-11-12, Branch main, Version 0.5.0 (neue Oberfläche, vorbereitet; Release `v0.4.5` ist das letzte veröffentlichte, 0.4.7 und 0.5.0 stehen zur Veröffentlichung auf dem Mac an)
+Stand: 2026-11-12, Branch main, Version 0.5.1 (0.5.0 vom Nutzer veröffentlicht, 0.5.1 steht zur Veröffentlichung auf dem Mac an)
 
 Ergänzt [UEBERGABE.md](UEBERGABE.md). Dort stehen Dateiübersicht, Funktionsweise der Mac-App, Release-Ablauf (Abschnitt 4) und Testanleitung (Abschnitt 5). Diese Datei hält Festlegungen, Learnings und Sackgassen fest und wird nicht mit UEBERGABE.md zusammengeführt.
 
@@ -104,6 +104,7 @@ Starten und Testen:
 | Haken entfernt, aber Vorschau, Zähler und Karte blieben rot (0.5.0) | Rechte Spalte (Liste) läuft nach der Vorschau; Auswahl kam zu spät in `st.session_state.auswahl` | Haken vor dem Zeichnen aus den Checkbox-Keys übernehmen (`haken_key`, `app.py`), Export verwerfen; Test `test_haken_entfernen_wirkt_sofort` | Auswahl erst beim Zeichnen der Liste übernehmen, wenn die Liste nach der Vorschau steht |
 | Tests schrieben in die echte `knowledge_base.json` | Abwählen lernt „nie schwärzen“, App liest relativ zum Arbeitsordner | `tests/test_app.py` startet in `tempfile.mkdtemp()` | App-Tests im Projektordner laufen lassen |
 | ◀ ▶ und Seitenzahl wechselten nur die Fundstellen-Liste, die Vorschau blieb stehen; Scrollbereich höher als das Fenster | Streamlit scrollt nicht selbst; `st.container(height=900)` fest | `zur_seite_scrollen` und CSS-Höhe in `app.py` (0.4.5) | Feste Container-Höhe über Fensterhöhe; CSS nur auf den Container statt auf seinen Wrapper (`flex: 0 0 800px` gewinnt) |
+| Fundstellenliste (rechte Spalte) erscheint nach dem Scannen mehrseitiger PDFs erst deutlich verzögert (Nutzer, 0.5.0) | Streamlit zeigt Elemente in Skriptreihenfolge; die Vorschau mit allen Seiten (Overlay und PNG je Seite) lief vor der rechten Spalte. Messung mit 30 Scan-Seiten (Bildrauschen, Textebene): Liste nach 6,0 s, erst zusammen mit den Seitenbildern | Rechte Spalte steht im Skript vor der Mittelspalte (`app.py`, 0.5.1); danach Liste nach 2,9 s, Seitenbilder nach 7,4 s | Rechte Spalte wieder hinter die Vorschau setzen |
 | Quarantäne-Attribut auf kopierten Dateien der Mac-App | Kopieren aus dem App-Bundle | Kopieren per `cat` in `macos/Grauzone-launcher.sh` | `cp` für diese Kopie verwenden |
 | Name in XMP-Metadaten, Lesezeichen oder eingebetteter Datei nach Export weiter im PDF (Messung 2026-11-12 mit erfundenen Daten) | `set_metadata({})` leert nur das Info-Wörterbuch; `apply_redactions()` erfasst nur Seiteninhalt | `E.bereinige_pdf` (XMP, Lesezeichen, Anhänge) und `E.pruefe_export` (Text und Helligkeit unter den Balken, Metadaten, Anmerkungen, Formularfelder), Tests `tests/test_export_pruefung.py` (0.4.7) | Beim Export nur `set_metadata({})` aufrufen; Satzzeichen neben einem Fund als Fehler der Prüfung zählen (bleiben absichtlich stehen) |
 | Name in PDF-Formularfeld nach Export lesbar über grauem Balken, Wert weiter in der Datei | `apply_redactions()` entfernt keine Formularfelder und Anmerkungen | `oeffne_pdf()` mit `widget.update()` und `doc.bake()` (`app.py`, 0.3.1; jetzt `erkennung.py`, Test `test_formularwert_wird_entfernt`) | PDF in `app.py` direkt mit `pymupdf.open` öffnen |
@@ -120,7 +121,7 @@ Verworfene Ansätze:
 
 ## 4. Offene Aufgaben
 
-- [ ] Release 0.5.0 (enthält 0.4.7; ein Release 0.4.7 entfällt, wenn 0.5.0 direkt folgt) mit allen vier Anhängen auf dem Mac bauen und veröffentlichen; danach Selbst-Update prüfen und Aufräumen auf den Macs (Priorität hoch)
+- [ ] Release 0.5.1 mit allen vier Anhängen auf dem Mac bauen und veröffentlichen; Selbst-Update von 0.5.0 auf 0.5.1 prüfen; Aufräumen auf den Macs (Priorität hoch)
 - [ ] `st.components.v1.html` (Scroll-Sprung in `zur_seite_scrollen`, auch in 0.4.5) ist ab Streamlit 1.68 abgekündigt, Ersatz `st.iframe`; vor Anheben der Grenze `<1.68` umstellen und Sprung im Browser prüfen (mittel)
 - [ ] Datumsprüfung `_ist_datum` in `finde` ist beim jetzigen TEL-Muster wirkungslos (kein Datum passt auf das Muster); bei Änderungen am TEL-Muster Test `test_datum_ist_keine_telefonnummer` beachten (niedrig)
 - [ ] Selbst-Update auf 0.4.5 beim Nutzer echt prüfen (Nutzer lief am 2026-11-11 noch mit 0.4.3) (hoch)

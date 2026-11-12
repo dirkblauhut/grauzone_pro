@@ -192,5 +192,86 @@ class Begruendung(unittest.TestCase):
         self.assertEqual("IBAN", falsch.art, "auch ohne gültige Prüfziffer gefunden und geschwärzt")
 
 
+def ein(text, **kw):
+    """(Text, Art, eindeutig) aller Fundstellen."""
+    return {(f.text, f.art, E.ist_eindeutig(f)) for f in funde(text, **kw)}
+
+
+class Kennnummern(unittest.TestCase):
+    # Beispielnummern aus öffentlichen Musterangaben (erfundene Personen)
+    def test_steuer_id_mit_pruefziffer(self):
+        self.assertIn(("86095742719", "KENN", True), ein("Steuer-ID: 86095742719"))
+        self.assertIn(("86 095 742 719", "KENN", True), ein("Identifikationsnummer 86 095 742 719"))
+        # Prüfziffer falsch: trotzdem schwärzen, aber prüfen
+        self.assertIn(("12345678901", "KENN", False), ein("Steuer-ID: 12345678901"))
+
+    def test_steuer_id_ohne_feld_nur_zu_pruefen(self):
+        self.assertIn(("86095742719", "KENN", False), ein("Die Nummer 86095742719 steht unten."))
+        self.assertEqual(set(), ein("Die Nummer 12345678901 steht unten."), "ohne Feld nur mit gültiger Prüfziffer")
+
+    def test_versicherungsnummern(self):
+        self.assertIn(("15 070649 C 103", "KENN", True), ein("Rentenversicherungsnummer: 15 070649 C 103"))
+        self.assertIn(("A123456780", "KENN", True), ein("KV-Nummer: A123456780"))
+        self.assertIn(("123456789A123", "KENN", True), ein("Versicherungsnummer: 123456789A123"))
+
+    def test_ausweis_karte_ip(self):
+        self.assertIn(("T220001293", "KENN", True), ein("Ausweisnummer: T220001293"))
+        self.assertIn(("4111 1111 1111 1111", "KENN", False), ein("Karte 4111 1111 1111 1111"))
+        self.assertEqual(set(), ein("Karte 4111 1111 1111 1112"), "Luhn-Prüfung")
+        self.assertIn(("192.168.10.24", "KENN", False), ein("Zugriff von 192.168.10.24 protokolliert"))
+
+    def test_feld_mit_wert(self):
+        self.assertIn(("K-4711-0815", "KENN", True), ein("Kundennummer: K-4711-0815"))
+        self.assertIn(("V-2024/0815", "KENN", True), ein("Vertragsnummer V-2024/0815 vom 1. Mai"))
+        self.assertIn(("K-AB 1234", "KENN", True), ein("Kennzeichen: K-AB 1234"))
+        self.assertIn(("COBADEFFXXX", "KENN", True), ein("BIC: COBADEFFXXX"))
+        # Der Wert endet vor dem nächsten Wort
+        self.assertIn(("4711", "KENN", True), ein("Kundennummer 4711 Sehr geehrte Frau"))
+
+    def test_aktenzeichen_bleibt_lesbar(self):
+        # Vom Nutzer festgelegt: Aktenzeichen und Vorgangsnummern nicht schwärzen
+        self.assertEqual(set(), ein("Aktenzeichen: 32-1234/25"))
+        self.assertEqual(set(), ein("Az.: 32-1234/25"))
+
+
+class Geburtsdatum(unittest.TestCase):
+    def test_nur_mit_kontext(self):
+        self.assertIn(("03.04.1985", "GEB", True), ein("geboren am 03.04.1985"))
+        self.assertIn(("3. April 1985", "GEB", True), ein("geb. 3. April 1985 in Musterstadt"))
+        self.assertIn(("03.04.85", "GEB", True), ein("Geburtsdatum: 03.04.85"))
+        self.assertIn(("Musterstadt", "ORT", True), ein("Geburtsort: Musterstadt"))
+
+    def test_andere_daten_und_geburtsname_bleiben(self):
+        # Vom Nutzer festgelegt: andere Daten und Alter nicht schwärzen
+        self.assertEqual(set(), ein("Termin am 03.04.2025, Frist 30 Tage"))
+        self.assertEqual(set(), ein("Die Antragstellerin ist 47 Jahre alt."))
+        self.assertFalse(any(a == "GEB" for _, a, _ in ein("Erika Mustermann, geb. Schmidt")))
+
+
+class Gesundheit(unittest.TestCase):
+    def test_feld_und_wortliste(self):
+        self.assertIn(("F32.1 mittelgradige depressive Episode", "GES", True),
+                      ein("Diagnose: F32.1 mittelgradige depressive Episode. Weiter im Text."))
+        self.assertIn(("30 mg Ramipril", "GES", True), ein("Medikation: 30 mg Ramipril"))
+        self.assertIn(("E11.9", "GES", True), ein("ICD-10: E11.9"))
+
+    def test_kontext(self):
+        self.assertIn(("Diabetes mellitus Typ 2", "GES", True), ein("Patient leidet an Diabetes mellitus Typ 2"))
+        self.assertIn(("Angststörung", "GES", True), ein("wegen einer Angststörung in ärztlicher Behandlung"))
+        # Wendung ohne bekannte Krankheit: gefunden, aber zu prüfen
+        self.assertIn(("Zeitdruck", "GES", False), ein("Er leidet unter Zeitdruck"))
+
+    def test_behinderung(self):
+        self.assertIn(("Grad der Behinderung von 50", "GES", False), ein("Grad der Behinderung von 50"))
+        self.assertIn(("schwerbehindert", "GES", False), ein("Sie ist schwerbehindert."))
+
+    def test_platzhalter_im_markdown(self):
+        t, woerter = E.seitentext(zeilen_aus("Diagnose: Asthma\nKundennummer: 4711"))
+        fs = E.finde(t, woerter, None, set(), [])
+        md, _ = E.markdown([(0, t, fs)], lambda p, f: True)
+        self.assertIn("[Gesundheitsangabe 1]", md)
+        self.assertIn("[Kennnummer 1]", md)
+
+
 if __name__ == "__main__":
     unittest.main()

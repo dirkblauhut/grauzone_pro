@@ -37,7 +37,7 @@ class Wort:
 @dataclass
 class Fund:
     text: str
-    art: str                                   # PER, ORT, ORG, TEL, MAIL, IBAN, ADR, LISTE
+    art: str                                   # PER, ORT, ORG, TEL, MAIL, IBAN, ADR, KENN, GEB, GES, LISTE
     woerter: list[int] = field(default_factory=list)
     start: int = 0
     ende: int = 0
@@ -46,7 +46,8 @@ class Fund:
 
 ARTEN = {
     "PER": "Person", "ORT": "Ort", "ORG": "Organisation", "TEL": "Telefon",
-    "MAIL": "E-Mail", "IBAN": "IBAN", "ADR": "Anschrift", "LISTE": "gelernt",
+    "MAIL": "E-Mail", "IBAN": "IBAN", "ADR": "Anschrift", "KENN": "Kennnummer",
+    "GEB": "Geburtsdatum", "GES": "Gesundheit", "LISTE": "gelernt",
 }
 
 # --- 1. Wörter holen ----------------------------------------------------------
@@ -174,12 +175,172 @@ BEGRUENDUNG = {
     "STRASSE": "Straße mit Hausnummer",
     "VORNAME": "Vorname aus der Vornamenliste",
     "LISTE": "gelernt: immer schwärzen",
+    "KENN_FELD": "Kennnummer nach Feldbezeichnung (Kundennummer:, Vertragsnummer: …)",
+    "KENN_PZ": "Kennnummer nach Feldbezeichnung, Prüfziffer gültig",
+    "KENN_PZ_FALSCH": "Kennnummer nach Feldbezeichnung, Prüfziffer nicht bestätigt",
+    "FORMAT_STEUER": "Format Steuer-ID, Prüfziffer gültig",
+    "FORMAT_RV": "Format Rentenversicherungsnummer, Prüfziffer gültig",
+    "FORMAT_KV": "Format Krankenversichertennummer, Prüfziffer gültig",
+    "FORMAT_KARTE": "Format Kreditkartennummer, Prüfziffer gültig",
+    "FORMAT_IP": "Format IP-Adresse",
+    "GEB": "Datum nach „geb.“, „geboren am“ oder „Geburtsdatum:“",
+    "GEBURTSORT": "Ort nach „Geburtsort:“",
+    "GES_FELD": "Gesundheitsangabe nach Feldbezeichnung (Diagnose:, Medikation: …)",
+    "GES_KONTEXT": "Gesundheitsangabe nach „leidet an“, „erkrankt an“ o. ä.",
+    "GES_WORT": "Krankheit, Behinderung oder Medikament aus der Wortliste",
+    "ICD": "ICD-10-Code",
 }
 # Quellen, die für sich allein eindeutig sind. Alle anderen (Sprachmodell, Vornamenliste,
 # E-Mail aus Texterkennung, IBAN ohne gültige Prüfziffer) gelten als „zu prüfen“, solange
 # nicht zwei verschiedene Quellen dieselbe Stelle finden. Keine Prozentwerte: spaCy
 # liefert keine verlässlichen Wahrscheinlichkeiten.
-EINDEUTIG = {"ANREDE", "FELD", "UMBRUCH", "TEL", "MAIL", "IBAN", "PLZ", "STRASSE", "LISTE"}
+EINDEUTIG = {"ANREDE", "FELD", "UMBRUCH", "TEL", "MAIL", "IBAN", "PLZ", "STRASSE", "LISTE",
+             "KENN_FELD", "KENN_PZ", "GEB", "GEBURTSORT", "GES_FELD", "ICD"}
+
+# --- Kennnummern -----------------------------------------------------------------
+# Vom Nutzer festgelegt (2026-11-12): Kunden-, Patienten- und Vertragsnummern sowie
+# staatliche und finanzielle Kennnummern; Aktenzeichen, Vorgangs- und Fallnummern
+# bleiben lesbar (Aktenzeichen der eigenen Behörde sind oft gewollt sichtbar).
+# Feldbezeichnung -> Art der Prüfziffer (None = keine Prüfziffer bekannt)
+KENN_FELDER = [
+    (r"Kunden-?(?:nummer|nr\.?)|Kd\.?-?Nr\.?|Kunden-?ID", None),
+    (r"Patienten-?(?:nummer|nr\.?|ID)", None),
+    (r"Vertrags-?(?:nummer|nr\.?)|Versicherungsschein-?(?:nummer|nr\.?)|Policen-?nummer", None),
+    (r"Steuer-?(?:ID|IdNr\.?|identifikationsnummer)|Steueridentifikationsnummer|Identifikationsnummer|IdNr\.?", "steuer"),
+    (r"Steuer-?(?:nummer|nr\.?)|St\.?-?Nr\.?", None),
+    (r"(?:Renten|Sozial)versicherungs-?(?:nummer|nr\.?)|[RS]V-?(?:Nummer|Nr\.?)", "rv"),
+    (r"Krankenversicherten-?(?:nummer|nr\.?)|KV-?(?:Nummer|Nr\.?)|Versicherten-?(?:nummer|nr\.?)", "kv"),
+    (r"Versicherungs-?(?:nummer|nr\.?)|Vers\.?-?Nr\.?", None),
+    (r"(?:Personal)?ausweis-?(?:nummer|nr\.?)|Ausweis-?Nr\.?", "ausweis"),
+    (r"(?:Reise)?pass-?(?:nummer|nr\.?)", None),
+    (r"F\u00fchrerschein-?(?:nummer|nr\.?)", None),
+    (r"Konto-?(?:nummer|nr\.?)|Kto\.?-?Nr\.?", None),
+    (r"(?:Kredit)?karten-?(?:nummer|nr\.?)", "karte"),
+    (r"BIC|SWIFT(?:-Code)?", "bic"),
+    (r"(?:amtl\.?\s+|Kfz-?|amtliches\s+)?Kennzeichen", None),
+    (r"IP-?Adresse", None),
+]
+_KENN_WERT = r"([A-Z\u00c4\u00d6\u00dc0-9]+(?![a-z\u00e4\u00f6\u00fc\u00df])(?:[ \-./][A-Z\u00c4\u00d6\u00dc0-9]+(?![a-z\u00e4\u00f6\u00fc\u00df])){0,6})"
+KENN_MUSTER = [(re.compile(rf"(?<![\w-])(?i:{feld})[ \t]*(?::|#|Nr\.?)?[ \t]*{_KENN_WERT}"), pz)
+               for feld, pz in KENN_FELDER]
+# Formate, die auch ohne Feldbezeichnung gesucht werden (nur mit gültiger Prüfziffer)
+FORMAT_MUSTER = [
+    ("steuer", "FORMAT_STEUER", re.compile(r"(?<![\d.,/])[1-9]\d[ ]?\d{3}[ ]?\d{3}[ ]?\d{3}(?![\d.,/])")),
+    ("rv", "FORMAT_RV", re.compile(r"(?<![\w])\d{2}[ ]?\d{6}[ ]?[A-Z][ ]?\d{2}[ ]?\d(?![\w])")),
+    ("kv", "FORMAT_KV", re.compile(r"(?<![\w])[A-Z]\d{9}(?![\w])")),
+    ("karte", "FORMAT_KARTE", re.compile(r"(?<![\d])[3-6]\d{3}(?:[ \-]?\d{4}){2}[ \-]?\d{1,7}(?![\d])")),
+    ("ip", "FORMAT_IP", re.compile(r"(?<![\d.])(?:(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)\.){3}(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)(?![\d.])")),
+]
+
+
+def _quersumme(n: int) -> int:
+    return sum(int(c) for c in str(n))
+
+
+def _pz_steuer(s: str) -> bool:
+    """Steuer-ID: 11 Ziffern, erste nicht 0, Prüfziffer nach ISO 7064 (Mod 11,10)."""
+    z = re.sub(r"\D", "", s.translate(_OCR_ZIFFER))
+    if len(z) != 11 or z[0] == "0":
+        return False
+    produkt = 10
+    for c in z[:10]:
+        summe = (int(c) + produkt) % 10 or 10
+        produkt = (summe * 2) % 11
+    return (11 - produkt) % 10 == int(z[10])
+
+
+def _pz_rv(s: str) -> bool:
+    """Rentenversicherungsnummer: Bereich (2), Geburtsdatum TTMMJJ, Buchstabe, Seriennummer (2),
+    Prüfziffer. Buchstabe als Position im Alphabet, Gewichte 2-1-2-5-7-1-2-1-2-1-2-1."""
+    z = re.sub(r"\s", "", s).upper()
+    m = re.fullmatch(r"(\d{2})(\d{2})(\d{2})(\d{2})([A-Z])(\d{2})(\d)", z)
+    if not m or not (1 <= int(m.group(2)) % 50 <= 31 and 1 <= int(m.group(3)) <= 12):
+        return False
+    ziffern = m.group(1) + m.group(2) + m.group(3) + m.group(4) + f"{ord(m.group(5)) - 64:02d}" + m.group(6)
+    gewichte = [2, 1, 2, 5, 7, 1, 2, 1, 2, 1, 2, 1]
+    return sum(_quersumme(int(c) * g) for c, g in zip(ziffern, gewichte)) % 10 == int(m.group(7))
+
+
+def _pz_kv(s: str) -> bool:
+    """Krankenversichertennummer: Buchstabe + 9 Ziffern; Buchstabe als zweistellige Zahl,
+    mit den ersten 8 Ziffern abwechselnd 1 und 2 gewichtet, Quersummen addiert, Mod 10."""
+    z = re.sub(r"\s", "", s).upper()
+    if not re.fullmatch(r"[A-Z]\d{9}", z):
+        return False
+    ziffern = f"{ord(z[0]) - 64:02d}" + z[1:9]
+    return sum(_quersumme(int(c) * (1 if i % 2 == 0 else 2)) for i, c in enumerate(ziffern)) % 10 == int(z[9])
+
+
+def _pz_ausweis(s: str) -> bool:
+    """Personalausweis-Seriennummer mit Prüfziffer: 9 Zeichen + Ziffer, Gewichte 7-3-1."""
+    z = re.sub(r"\s", "", s).upper()
+    if not re.fullmatch(r"[0-9A-Z]{9}\d", z):
+        return False
+    werte = [int(c, 36) for c in z[:9]]
+    return sum(w * (7, 3, 1)[i % 3] for i, w in enumerate(werte)) % 10 == int(z[9])
+
+
+def _pz_karte(s: str) -> bool:
+    """Kreditkartennummer: 13 bis 19 Ziffern, Luhn-Prüfung."""
+    z = re.sub(r"\D", "", s)
+    if not 13 <= len(z) <= 19:
+        return False
+    summe = 0
+    for i, c in enumerate(reversed(z)):
+        d = int(c) * (2 if i % 2 else 1)
+        summe += d - 9 if d > 9 else d
+    return summe % 10 == 0
+
+
+PRUEFZIFFER = {"steuer": _pz_steuer, "rv": _pz_rv, "kv": _pz_kv, "ausweis": _pz_ausweis,
+               "karte": _pz_karte, "ip": lambda s: True}
+# Nur Formatprüfung, keine Prüfziffer: BIC (Bank, Land, Ort, optional Filiale)
+FORMAT_OHNE_PZ = {"bic": lambda s: bool(re.fullmatch(r"[A-Z]{6}[A-Z0-9]{2}(?:[A-Z0-9]{3})?", s.replace(" ", "")))}
+
+# --- Geburtsdatum (nur mit Kontext; alle anderen Daten bleiben lesbar, Nutzer 2026-11-12) ---
+_MONATE = "Januar|Februar|M\u00e4rz|April|Mai|Juni|Juli|August|September|Oktober|November|Dezember"
+GEB_MUSTER = re.compile(
+    rf"(?<!\w)(?i:geb\.|geboren(?:[ \t]+am)?|Geburtsdatum|Geb\.-?Datum|Geburtstag)[ \t]*:?[ \t]*"
+    rf"(\d{{1,2}}\.[ \t]?\d{{1,2}}\.[ \t]?(?:\d{{4}}|\d{{2}})(?!\d)|\d{{1,2}}\.[ \t]?(?:{_MONATE})[ \t]+\d{{4}})")
+GEBURTSORT_MUSTER = re.compile(rf"(?<!\w)(?i:Geburtsort)[ \t]*:[ \t]*({GROSS}(?:[ \t\-]{GROSS})?)")
+
+# --- Gesundheitsdaten (Art. 9 DSGVO): Diagnosen, Krankheiten, Medikamente, Behandlungen,
+# Behinderungen (Nutzer 2026-11-12). Alter und Datum werden nicht erkannt. ---
+GES_FELD_MUSTER = re.compile(
+    r"(?<!\w)(?i:Diagnosen?|Befunde?|Erkrankungen?|Krankheit(?:en)?|Vorerkrankungen?|Krankheitsbild|"
+    r"Medikation|Medikamente?|Behandlungen?|Therapien?|Behinderungen?|Grad der Behinderung|GdB|"
+    r"Pflegegrad|Allergien?)[ \t]*:[ \t]*([^\n]{2,120}?)[ \t]*(?=\.[ \t]+[A-Z\u00c4\u00d6\u00dc]|\.?[ \t]*$)",
+    re.MULTILINE)
+GES_KONTEXT_MUSTER = [
+    re.compile(r"(?<!\w)(?:leidet|leiden|litt|erkrankt(?:e|en)?)[ \t]+(?:seit[ \t]+[^\s,.;]+(?:[ \t]+[^\s,.;]+)?[ \t]+)?"
+               r"(?:an|unter)[ \t]+(?:(?:einer|einem|einen|eine|chronischer|chronischen|akuter|akuten)[ \t]+)*"
+               r"([^.,;:\n]{3,60})"),
+    re.compile(r"(?<!\w)wegen[ \t]+(?:(?:einer|eines|einem)[ \t]+)?([^.,;:\n]{3,50}?)[ \t]+in[ \t]+"
+               r"(?:(?:\u00e4rztlicher|station\u00e4rer|ambulanter|psychiatrischer|psychotherapeutischer)[ \t]+)?Behandlung"),
+    re.compile(r"(?<!\w)(?:wurde|wurden)[ \t]+(?:bei[ \t]+\S+[ \t]+)?(?:(?:eine|ein|einen)[ \t]+)?"
+               r"([^.,;:\n]{3,50}?)[ \t]+(?:diagnostiziert|festgestellt)"),
+]
+GES_WOERTER = [
+    r"Diabetes(?:[ \t]+mellitus)?(?:[ \t]+Typ[ \t]+[12])?", r"Depressionen?", r"depressive[nr]?[ \t]+Episode",
+    "Burn-?out", r"Krebserkrankung", r"Karzinom", r"Leuk\u00e4mie", r"Lymphom", r"Demenz", r"Alzheimer(?:-Krankheit)?",
+    r"Parkinson(?:-Krankheit)?", r"Multiple[ \t]+Sklerose", r"Epilepsie", r"Asthma(?:[ \t]+bronchiale)?", "COPD",
+    "HIV", "AIDS", r"Hepatitis(?:[ \t]+[A-E])?", r"Schlaganfall", r"Herzinfarkt", r"Hypertonie", r"Bluthochdruck",
+    r"Schizophrenie", r"Psychose", r"bipolare[nr]?[ \t]+St\u00f6rung", r"Angstst\u00f6rung(?:en)?",
+    r"Posttraumatische[nr]?[ \t]+Belastungsst\u00f6rung", "PTBS", r"Essst\u00f6rung", r"Anorexie", r"Bulimie",
+    r"Alkoholabh\u00e4ngigkeit", r"Drogenabh\u00e4ngigkeit", r"Suchterkrankung", "ADHS", r"Autismus",
+    r"Long[ \t\-]Covid", r"Rheuma(?:toide[ \t]+Arthritis)?", r"Arthrose", r"Bandscheibenvorfall", r"Tinnitus",
+    r"Schwerbehinderung", r"schwerbehindert(?:e[nr]?)?", r"Gehörlosigkeit", r"geh\u00f6rlos", r"Blindheit",
+    r"Querschnittsl\u00e4hmung", r"Rollstuhl", r"Pflegegrad[ \t]+[1-5]", r"GdB[ \t]+(?:von[ \t]+)?\d{2,3}",
+    r"Grad[ \t]+der[ \t]+Behinderung[ \t]+(?:von[ \t]+)?\d{2,3}",
+    # Medikamente (häufige Wirkstoffe und Handelsnamen)
+    "Insulin", "Metformin", "Ramipril", "Bisoprolol", "Metoprolol", "Amlodipin", "Simvastatin", "Levothyroxin",
+    "L-Thyroxin", "Methylphenidat", "Ritalin", "Sertralin", "Citalopram", "Escitalopram", "Fluoxetin", "Venlafaxin",
+    "Mirtazapin", "Amitriptylin", "Lithium", "Quetiapin", "Olanzapin", "Risperidon", "Diazepam", "Lorazepam",
+    "Methadon", "Tilidin", "Tramadol", "Morphin", "Fentanyl", "Marcumar", "Xarelto", "Eliquis", "Cortison",
+    "Prednisolon", "Antidepressiv(?:um|a)", "Neuroleptik(?:um|a)", "Chemotherapie", "Dialyse", "Psychotherapie",
+]
+GES_WORT_MUSTER = re.compile(r"(?<![\w-])(?:" + "|".join(GES_WOERTER) + r")(?![\w])")
+ICD_MUSTER = re.compile(r"(?<!\w)ICD(?:-10)?(?:-GM)?[ \t]*:?[ \t]*([A-TV-Z]\d{2}(?:\.\d{1,2})?[GVAZ]?)(?![\w])")
 # Großgeschriebene Wörter, die am Zeilenanfang folgen können und keine Namen sind
 NICHT_NAME = {
     "Ihr", "Ihre", "Ihren", "Ihrem", "Ihrer", "Ihres", "Sie", "Der", "Die", "Das", "Den", "Dem",
@@ -290,6 +451,44 @@ def finde(text: str, woerter: list[Wort], nlp, vornamen: set[str], gelernt: list
         for m in re.finditer(r"(?<!\w)" + re.escape(begriff.strip()) + r"(?!\w)", text, re.IGNORECASE):
             spans.append((m.start(), m.end(), "LISTE", "LISTE"))
 
+    # Kennnummern nach Feldbezeichnung; mit Prüfziffer, wo eine bekannt ist
+    for rx, pz in KENN_MUSTER:
+        for m in rx.finditer(text):
+            wert = m.group(1)
+            if pz in FORMAT_OHNE_PZ:
+                if not FORMAT_OHNE_PZ[pz](wert):
+                    continue
+                quelle = "KENN_FELD"
+            elif sum(c.isdigit() for c in wert) < 1 or len(re.sub(r"\W", "", wert)) < 4:
+                continue
+            elif pz is None:
+                quelle = "KENN_FELD"
+            else:
+                quelle = "KENN_PZ" if PRUEFZIFFER[pz](wert) else "KENN_PZ_FALSCH"
+            spans.append((m.start(1), m.end(1), "KENN", quelle))
+    # Kennnummern nur am Format erkennbar: nur mit gültiger Prüfziffer, gelten als „zu prüfen“
+    for pz, quelle, rx in FORMAT_MUSTER:
+        for m in rx.finditer(text):
+            if PRUEFZIFFER[pz](m.group(0)):
+                spans.append((m.start(), m.end(), "KENN", quelle))
+
+    # Geburtsdatum und Geburtsort nur mit Kontext
+    for m in GEB_MUSTER.finditer(text):
+        spans.append((m.start(1), m.end(1), "GEB", "GEB"))
+    for m in GEBURTSORT_MUSTER.finditer(text):
+        spans.append((m.start(1), m.end(1), "ORT", "GEBURTSORT"))
+
+    # Gesundheitsdaten
+    for m in GES_FELD_MUSTER.finditer(text):
+        spans.append((m.start(1), m.end(1), "GES", "GES_FELD"))
+    for rx in GES_KONTEXT_MUSTER:
+        for m in rx.finditer(text):
+            spans.append((m.start(1), m.end(1), "GES", "GES_KONTEXT"))
+    for m in GES_WORT_MUSTER.finditer(text):
+        spans.append((m.start(), m.end(), "GES", "GES_WORT"))
+    for m in ICD_MUSTER.finditer(text):
+        spans.append((m.start(1), m.end(1), "GES", "ICD"))
+
     # Satzzeichen am Rand abschneiden, überlappende Stellen zusammenfassen
     bereinigt = []
     for s, e, art, quelle in spans:
@@ -305,7 +504,7 @@ def finde(text: str, woerter: list[Wort], nlp, vornamen: set[str], gelernt: list
             bereinigt.append((s, e, art, quelle))
     bereinigt.sort()
     zusammen: list[list] = []
-    rang = ["LISTE", "IBAN", "MAIL", "TEL", "PER", "ADR", "ORT", "ORG"]
+    rang = ["LISTE", "IBAN", "KENN", "MAIL", "TEL", "GEB", "GES", "PER", "ADR", "ORT", "ORG"]
     for s, e, art, quelle in bereinigt:
         if zusammen and s < zusammen[-1][1]:
             letzte = zusammen[-1]
@@ -354,7 +553,8 @@ def wort_rechteck(wort: Wort, fund: Fund) -> tuple[float, float, float, float]:
 
 PLATZHALTER = {
     "PER": "Person", "ORT": "Ort", "ORG": "Organisation", "TEL": "Telefon",
-    "MAIL": "E-Mail", "IBAN": "IBAN", "ADR": "Anschrift", "LISTE": "geschwärzt",
+    "MAIL": "E-Mail", "IBAN": "IBAN", "ADR": "Anschrift", "KENN": "Kennnummer",
+    "GEB": "Geburtsdatum", "GES": "Gesundheitsangabe", "LISTE": "geschwärzt",
 }
 _MD_ZEICHEN = re.compile(r"([\\`*_\[\]<>#|~])")
 _MD_ZEILENANFANG = re.compile(r"^(\s*)(?:([-+>=])|(\d+)([.)]))(?=\s|$)")

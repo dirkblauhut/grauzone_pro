@@ -108,5 +108,23 @@ class Scan(unittest.TestCase):
         self.assertIn("geehrte", gelesen)
 
 
+class Sensibel(unittest.TestCase):
+    """Kennnummer, Geburtsdatum und Gesundheitsangabe werden physisch entfernt,
+    Feldbezeichnungen und andere Daten bleiben lesbar (erfundene Angaben)."""
+    def test_export(self):
+        doc = pymupdf.open()
+        text_seite(doc, ["Steuer-ID: 86095742719", "geboren am 03.04.1985",
+                         "Diagnose: Asthma bronchiale", "Termin am 01.02.2026", "Aktenzeichen: 32-1234/25"])
+        daten = als_bytes(doc)
+        # Nur die neuen Arten schwärzen: Das kleine Sprachmodell meldet hier zusätzlich
+        # „Steuer-ID“ oder das Termin-Datum als Organisation/Ort (unter „zu prüfen“)
+        ergebnis, _ = exportiere(daten, scanne(daten), lambda p, f: f.art in {"KENN", "GEB", "GES"})
+        text = pymupdf.open(stream=ergebnis, filetype="pdf")[0].get_text()
+        for weg in ("86095742719", "03.04.1985", "Asthma"):
+            self.assertNotIn(weg, text)
+        for bleibt in ("Steuer-ID:", "geboren am", "Diagnose:", "01.02.2026", "32-1234/25"):
+            self.assertIn(bleibt, text)
+
+
 if __name__ == "__main__":
     unittest.main()

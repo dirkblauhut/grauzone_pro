@@ -139,8 +139,8 @@ def rechtecke(p, fund):
     return [E.wort_rechteck(woerter[i], fund) for i in fund.woerter]
 
 
-GRUPPEN = {"Alle": None, "Personen": {"PER"}, "Kontakte": {"TEL", "MAIL", "ADR"},
-           "Weitere": {"ORT", "ORG", "IBAN", "LISTE"}}
+GRUPPEN = {"Alle": None, "Personen": {"PER", "GEB"}, "Kontakte": {"TEL", "MAIL", "ADR"},
+           "Weitere": {"ORT", "ORG", "IBAN", "KENN", "GES", "LISTE"}}
 
 
 def passt(fund, gruppe, suche):
@@ -378,7 +378,8 @@ if not uploaded_file:
             st.markdown(
                 "1. Links ein PDF hochladen.\n"
                 "2. **Alle Seiten scannen**: Grauzone sucht Namen, Anschriften, Telefonnummern, "
-                "E-Mail-Adressen und IBANs.\n"
+                "E-Mail-Adressen, IBANs, Kennnummern (z. B. Steuer-ID, Kundennummer), Geburtsdaten "
+                "und Gesundheitsangaben.\n"
                 "3. Rechts die Fundstellen prüfen: Haken = wird geschwärzt.\n"
                 "4. **Schwärzen & exportieren**: PDF ohne die Daten und optional Markdown.")
             st.caption("Grauzone arbeitet vollständig lokal. Dokumente verlassen diesen Rechner nicht.")

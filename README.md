@@ -1,6 +1,6 @@
 # 🛡️ Grauzone PRO: Lokale PDF-Anonymisierung
 
-Grauzone PRO erkennt und schwärzt personenbezogene Daten (Namen, Orte, Organisationen, Telefonnummern) in PDF-Dokumenten.
+Grauzone PRO erkennt und schwärzt personenbezogene Daten (Namen, Anschriften, Telefonnummern, E-Mail-Adressen, Kennnummern, Geburtsdaten, Gesundheitsangaben) in PDF-Dokumenten.
 
 **Alles läuft lokal auf dem eigenen Rechner.** Dokumente werden nicht in eine Cloud hochgeladen. Internet braucht es bei der Einrichtung, um Programmbibliotheken und KI-Modelle herunterzuladen. Die Mac-App fragt außerdem beim Start bei GitHub die neueste Versionsnummer ab (abschaltbar, keine Dokumentinhalte).
 
@@ -9,13 +9,17 @@ Grauzone PRO erkennt und schwärzt personenbezogene Daten (Namen, Orte, Organisa
 ## ✨ Funktionen
 
 - **Schwärzt nur, was nötig ist:** Geschwärzt werden einzelne Namen, Anschriften oder Nummern, nicht ganze Zeilen. Anrede („Frau“, „Herr“) und der übrige Text bleiben lesbar.
-- **Erkennung:** spaCy-Sprachmodell (`de_core_news_lg`, ersatzweise `de_core_news_sm`) für Personen, Orte und Organisationen, dazu feste Muster für Telefon- und Faxnummern, E-Mail-Adressen, IBAN, Straße mit Hausnummer, Postleitzahl mit Ort, Namen nach „Herr/Frau“ und eine Vornamenliste. Datumsangaben gelten nicht als Telefonnummer.
+- **Erkennung:** spaCy-Sprachmodell (`de_core_news_lg`, ersatzweise `de_core_news_sm`) für Personen, Orte und Organisationen, dazu feste Muster für Telefon- und Faxnummern, E-Mail-Adressen, IBAN (mit Prüfziffer), Straße mit Hausnummer, Postleitzahl mit Ort, Namen nach „Herr/Frau“ und eine Vornamenliste.
+- **Kennnummern:** Kunden-, Patienten-, Vertrags- und Versicherungsnummern, Steuer-ID und Steuernummer, Renten- und Krankenversicherungsnummer, Ausweis-, Pass- und Führerscheinnummer, Konto- und Kreditkartennummer, BIC, Kfz-Kennzeichen und IP-Adressen. Wo es eine Prüfziffer gibt, wird sie geprüft. Aktenzeichen und Vorgangsnummern bleiben lesbar.
+- **Geburtsdatum und Gesundheit:** Ein Datum wird nur nach „geb.“, „geboren am“ oder „Geburtsdatum:“ geschwärzt, alle anderen Daten und Altersangaben bleiben stehen. Gesundheitsangaben (Diagnosen, Krankheiten, Medikamente, Behandlungen, Behinderungen) über Feldbezeichnungen wie „Diagnose:“, Wendungen wie „leidet an“, eine Wortliste und ICD-10-Codes.
 - **Textebene oder Texterkennung:** Hat das PDF eine Textebene, nutzt Grauzone deren genaue Wortpositionen. Gescannte Seiten liest EasyOCR. Für PDFs mit eingefügten Bildern lässt sich die Texterkennung in der Kopfzeile erzwingen.
 - **Mehrseitig:** „Alle Seiten“ scannt das ganze Dokument; beim Export werden alle gescannten Seiten geschwärzt. Nicht gescannte Seiten werden vorher deutlich gemeldet.
 - **Durch mehrseitige PDFs scrollen:** Die Vorschau zeigt alle Seiten untereinander. Mit den Pfeilen ◀ ▶, der Seitenzahl in der Kopfzeile oder „Bearbeiten“ an einer Seite springt die Vorschau zur gewählten Seite; rechts stehen deren Fundstellen. Der Scrollbereich passt sich der Fensterhöhe an. Abschaltbar in der Kopfzeile („Alle Seiten untereinander zeigen“).
-- **Prüfen und korrigieren:** Jede Fundstelle steht mit Art (Person, Anschrift, Telefon …) in einer Liste und ist in der Vorschau rot markiert. Abwählen = bleibt stehen; fehlende Begriffe lassen sich eintippen.
+- **Prüfen und korrigieren:** Jede Fundstelle steht mit Art und Begründung in einer Liste und ist in der Vorschau rot markiert. Unsichere Fundstellen stehen oben unter „Zu prüfen“. Abwählen = bleibt stehen; fehlende Begriffe lassen sich eintippen. Suche über alle Seiten, „Alle schwärzen/freigeben“ für Filter und Suche, gleiche Angaben auf allen Seiten gemeinsam entscheiden, Rückgängig und Wiederholen.
+- **Ergebnis vergleichen:** Die Ansicht „Ergebnis“ zeigt das geschwärzte PDF zur aktuellen Auswahl, „Beide“ stellt es neben das Original.
 - **Lernt mit:** Abgewählte Stellen („nie schwärzen“) und eingetippte Begriffe („immer schwärzen“) merkt sich `knowledge_base.json` für künftige Dokumente.
 - **Sauberer Export:** Der Text unter den Balken wird aus dem PDF entfernt (bei Scans die Bildpunkte), die Dokument-Metadaten (Autor, Titel), XMP-Metadaten, Lesezeichen und eingebettete Dateien werden gelöscht. Nach dem Export prüft Grauzone das fertige PDF noch einmal (Text und Helligkeit unter den Balken, Metadaten, Lesezeichen, Anhänge, Anmerkungen, Formularfelder) und meldet Auffälligkeiten. Formularfelder und Anmerkungen werden vorher fest in die Seite übernommen, damit auch ihr Text unter den Balken verschwindet; im Ergebnis sind die Felder nicht mehr ausfüllbar.
+- **Einzelne Seiten exportieren:** z. B. „1-3, 5“; leer heißt das ganze Dokument.
 - **Export als Markdown:** Zusätzlich zum PDF lässt sich der Text der gescannten Seiten als `.md`-Datei herunterladen. Geschwärzte Stellen stehen dort als Platzhalter wie `[Person 1]` oder `[Anschrift 2]`; gleiche Angaben tragen im ganzen Dokument dieselbe Nummer. Tabellen und Layout bleiben dabei nicht erhalten.
 
 > Die Erkennung ist eine Hilfe, keine Garantie. Vor dem Weitergeben jede Seite selbst durchsehen.

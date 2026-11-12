@@ -87,6 +87,19 @@ class AppDurchlauf(unittest.TestCase):
         for verboten in ("Mustermann", "probe", "Musterstadt", "0221"):
             self.assertNotIn(verboten, protokoll)
 
+    def test_dateinamen_ohne_originalnamen(self):
+        # Der Originalname (hier „probe.pdf“) kann Personennamen enthalten
+        at = self.at
+        knopf(at, "Schwärzen & exportieren").click().run()
+        self.assertEqual([], [str(e.value) for e in at.exception])
+        pdf, md, protokoll = at.session_state.export[6]
+        stempel = r"\d{4}-\d{2}-\d{2}_\d{2}-\d{2}"
+        self.assertRegex(pdf, rf"^{stempel}_Anonymisiert\.pdf$")
+        self.assertRegex(md, rf"^{stempel}_Anonymisiert\.md$")
+        self.assertRegex(protokoll, rf"^{stempel}_Pruefprotokoll\.md$")
+        self.assertEqual(pdf[:16], md[:16], "PDF und Markdown mit demselben Zeitstempel")
+        self.assertEqual(pdf[:16], protokoll[:16], "Protokoll mit demselben Zeitstempel")
+
     def test_haken_entfernen_wirkt_sofort(self):
         # Behoben (Testversion): Vorschau und Zähler wurden vor der Liste gezeichnet
         # und zeigten die alte Auswahl

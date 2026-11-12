@@ -487,6 +487,7 @@ with col_r:
                 zu_schwaerzen = {
                     p: [r for fund in funde_der_seite(p) if ist_gewaehlt(p, fund) for r in rechtecke(p, fund)]
                     for p in gescannt}
+                jetzt = datetime.now()
                 pdf_daten, anzahl = E.schwaerze(file_content, zu_schwaerzen)
                 meldungen = E.pruefe_export(pdf_daten, zu_schwaerzen)
                 md, _ = E.markdown(
@@ -497,28 +498,33 @@ with col_r:
                     nicht_gescannt=[p for p in range(n) if p not in st.session_state.woerter])
                 protokoll = E.pruefprotokoll(
                     version=VERSION, modell=nlp.meta.get("name", "unbekannt"),
-                    zeitpunkt=f"{datetime.now():%d.%m.%Y %H:%M}", original=file_content, export=pdf_daten,
+                    zeitpunkt=f"{jetzt:%d.%m.%Y %H:%M}", original=file_content, export=pdf_daten,
                     seiten_gesamt=n, quellen={p: st.session_state.woerter[p]["quelle"] for p in gescannt},
                     funde={p: funde_der_seite(p) for p in gescannt}, gewaehlt=ist_gewaehlt,
                     balken=anzahl, meldungen=meldungen)
-                st.session_state.export = (pdf_daten, md, anzahl, len(gescannt), meldungen, protokoll)
+                # Dateinamen ohne Originalnamen (kann Personennamen enthalten), einmal je Export
+                # festgelegt, damit PDF, Markdown und Protokoll denselben Zeitstempel tragen
+                # Bindestrich statt Doppelpunkt in der Uhrzeit: Windows verbietet „:“, Browser ersetzen es
+                stempel = f"{jetzt:%Y-%m-%d_%H-%M}"
+                namen = (f"{stempel}_Anonymisiert.pdf", f"{stempel}_Anonymisiert.md",
+                         f"{stempel}_Pruefprotokoll.md")
+                st.session_state.export = (pdf_daten, md, anzahl, len(gescannt), meldungen, protokoll, namen)
             if st.session_state.export:
-                daten, md, anzahl, seiten, meldungen, protokoll = st.session_state.export
+                daten, md, anzahl, seiten, meldungen, protokoll, namen = st.session_state.export
                 if meldungen:
                     st.error("**Exportprüfung nicht bestanden.** Das PDF vor der Weitergabe nicht verwenden, "
                              "sondern prüfen:\n\n" + "\n".join(f"- {m}" for m in meldungen))
                 else:
                     st.success(f"{anzahl} Stellen auf {seiten} Seite(n) geschwärzt. "
                                "Exportprüfung bestanden (Text, Balken, Metadaten, Lesezeichen, Anhänge).")
-                name = os.path.splitext(uploaded_file.name)[0]
                 d1, d2, d3 = st.columns(3)
-                d1.download_button("📥 Geschwärztes PDF", daten, f"Anonymisiert_{name}.pdf",
+                d1.download_button("📥 Geschwärztes PDF", daten, namen[0],
                                    mime="application/pdf", width="stretch")
-                d2.download_button("📝 Markdown", md.encode("utf-8"), f"Anonymisiert_{name}.md",
+                d2.download_button("📝 Markdown", md.encode("utf-8"), namen[1],
                                    mime="text/markdown", width="stretch",
                                    help="Text der gescannten Seiten; geschwärzte Stellen als Platzhalter "
                                         "wie [Person 1]. Tabellen und Layout bleiben nicht erhalten.")
-                d3.download_button("📋 Protokoll", protokoll.encode("utf-8"), f"Pruefprotokoll_{datetime.now():%Y%m%d_%H%M}.md",
+                d3.download_button("📋 Protokoll", protokoll.encode("utf-8"), namen[2],
                                    mime="text/markdown", width="stretch",
                                    help="Prüfprotokoll ohne Originaldaten: Kennung (Hash), Zahlen je Art, "
                                         "Ergebnis der Exportprüfung. Der Dateiname enthält nicht den Namen des Dokuments.")

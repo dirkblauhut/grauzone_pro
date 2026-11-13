@@ -1,6 +1,6 @@
 # Projektstand: Grauzone PRO
 
-Stand: 2026-11-13, Branch main, Version 0.7.0 (0.5.0 und 0.5.1 vom Nutzer veröffentlicht, 0.5.2 und 0.6.0 aus der lokalen Sitzung auf dem Mac; 0.7.0 noch nicht veröffentlicht)
+Stand: 2026-11-13, Branch main, Version 0.7.0 (0.5.0 und 0.5.1 vom Nutzer veröffentlicht, 0.5.2, 0.6.0 und 0.7.0 aus der lokalen Sitzung auf dem Mac)
 
 Ergänzt [UEBERGABE.md](UEBERGABE.md). Dort stehen Dateiübersicht, Funktionsweise der Mac-App, Release-Ablauf (Abschnitt 4) und Testanleitung (Abschnitt 5). Diese Datei hält Festlegungen, Learnings und Sackgassen fest und wird nicht mit UEBERGABE.md zusammengeführt.
 
@@ -153,7 +153,7 @@ Stand 2026-11-13: 0.6.0 (Pakete A, B, C) veröffentlicht: Tag `v0.6.0` auf 33b83
 Als Nächstes, in dieser Reihenfolge:
 1. Erledigt 2026-11-13: Selbst-Update von 0.5.2 auf 0.6.0 vom Nutzer am Mac erfolgreich durchlaufen.
 2. Nutzer: zwei, drei echte Dokumente (Brief, Scan, Formular) bearbeiten und notieren, was übersehen oder zu viel geschwärzt wurde, ohne Inhalte weiterzugeben.
-3. Erledigt in 0.7.0 (Paket D): Markieren in der Vorschau, „Begriff schwärzen“, Formularzeilen. Release 0.7.0 vorbereiten und nach Rückfrage veröffentlichen; danach vom Nutzer erneut mit dem handschriftlichen Formular prüfen lassen (Selbst-Update richtet wegen geänderter `requirements.txt` die Bibliotheken neu ein).
+3. Erledigt in 0.7.0 (Paket D): Markieren in der Vorschau, „Begriff schwärzen“, Formularzeilen. Release 0.7.0 veröffentlicht am 2026-11-13 (Tag `v0.7.0` auf 6207fce, vier Anhänge, Prüfsumme stimmt, `releases/latest/download/VERSION` liefert 0.7.0); als Nächstes vom Nutzer erneut mit dem handschriftlichen Formular prüfen lassen (Selbst-Update richtet wegen geänderter `requirements.txt` die Bibliotheken neu ein).
 4. Je nach Ergebnis von 2: Wortliste `GES_WOERTER` erweitern; Feldnamen von Formularen vor `doc.bake()` als Kontext nutzen (heute steht ein Name im Feld „Name“ nur unter „zu prüfen“); BIC-Länderkürzel; „Musterweg 12“ als Anschrift.
 5. Später, mit Vorab-Entscheidung des Nutzers: Sitzungen speichern (Datenschutz der Sitzungsdatei), Tastaturkürzel (nach Umstellung auf `st.iframe`), wiederkehrende Passagen (Briefkopf, Fußzeile).
 

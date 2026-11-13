@@ -1,6 +1,6 @@
 # Projektstand: Grauzone PRO
 
-Stand: 2026-11-12, Branch main, Version 0.6.0 (0.5.0 und 0.5.1 vom Nutzer veröffentlicht, 0.5.2 aus der lokalen Sitzung auf dem Mac; 0.6.0 committet, noch nicht veröffentlicht)
+Stand: 2026-11-13, Branch main, Version 0.6.0 (0.5.0 und 0.5.1 vom Nutzer veröffentlicht, 0.5.2 und 0.6.0 aus der lokalen Sitzung auf dem Mac)
 
 Ergänzt [UEBERGABE.md](UEBERGABE.md). Dort stehen Dateiübersicht, Funktionsweise der Mac-App, Release-Ablauf (Abschnitt 4) und Testanleitung (Abschnitt 5). Diese Datei hält Festlegungen, Learnings und Sackgassen fest und wird nicht mit UEBERGABE.md zusammengeführt.
 
@@ -146,7 +146,7 @@ Verworfene Ansätze:
 
 ### Nächster konkreter Schritt
 
-Stand 2026-11-13: 0.6.0 (Pakete A, B, C) in `main`; Release 0.6.0 wird vorbereitet (Paket in `dist/` neu bauen, Veröffentlichung nur nach Rückfrage). Gesamtprüfung 2026-11-13 mit gemischtem Test-PDF (Textseite, Scan per OCR, Formularfeld; erfundene Daten, `de_core_news_lg`): alle Angaben auf Text- und Scan-Seite erkannt und entfernt, Exportprüfung bestanden, Aktenzeichen und Briefdatum bleiben lesbar; 30 Seiten Regeln in 0,3 s.
+Stand 2026-11-13: 0.6.0 (Pakete A, B, C) veröffentlicht: Tag `v0.6.0` auf 33b83b5, Release mit allen vier Anhängen als neuestes markiert, Prüfsumme der heruntergeladenen Dateien stimmt, `releases/latest/download/VERSION` liefert 0.6.0 (davon hängt das Selbst-Update ab). Gesamtprüfung 2026-11-13 mit gemischtem Test-PDF (Textseite, Scan per OCR, Formularfeld; erfundene Daten, `de_core_news_lg`): alle Angaben auf Text- und Scan-Seite erkannt und entfernt, Exportprüfung bestanden, Aktenzeichen und Briefdatum bleiben lesbar; 30 Seiten Regeln in 0,3 s.
 
 Als Nächstes, in dieser Reihenfolge:
 1. Nutzer am Mac: Selbst-Update von 0.5.2 auf 0.6.0 durchlaufen (seit 0.4.0 nie an einer installierten App geprüft, größtes Risiko).

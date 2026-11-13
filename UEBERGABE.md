@@ -23,7 +23,7 @@ Grauzone PRO schwärzt personenbezogene Daten in PDF-Dokumenten, vollständig lo
 |---|---|
 | `app.py` | Oberfläche: Hochladen, Scannen (Seite / alle Seiten), Fundstellen-Liste, Lernen, Export |
 | `erkennung.py` | Erkennung ohne Streamlit: Wörter holen, Seitentext bauen, Fundstellen suchen, Rechtecke berechnen, Markdown-Export (`markdown`) |
-| `requirements.txt` | Bibliotheken; **spaCy < 3.6 und numpy < 2 sind Pflicht**; Streamlit auf getestete Versionen begrenzt (`>=1.50,<1.68`); PyMuPDF je nach Python: 2.1.x ab 3.11, sonst 1.26.x |
+| `requirements.txt` | Bibliotheken; **spaCy < 3.6 und numpy < 2 sind Pflicht**; Streamlit auf getestete Versionen begrenzt (`>=1.50,<1.68`); PyMuPDF je nach Python: 1.28.x ab 3.11 (nicht 2.x, siehe Fallstricke), sonst 1.26.x |
 | `.streamlit/config.toml` | nur `localhost`, keine Nutzungsstatistik, `headless` (keine E-Mail-Abfrage) |
 | `Grauzone installieren.command` | Einrichtung aus dem Quellcode per Doppelklick (uv + Python 3.11) |
 | `START_GRAUZONE.command`, `starten.command` | Start nach der Einrichtung |
@@ -66,7 +66,8 @@ Die App ist nur ad hoc signiert, nicht notarisiert. macOS fragt beim ersten Öff
 
 - `python -m spacy download …` funktioniert mit spaCy 3.5 nicht mehr (Link mit Fehler 404). Modelle direkt als Wheel installieren: `https://github.com/explosion/spacy-models/releases/download/<modell>-3.5.0/<modell>-3.5.0-py3-none-any.whl`.
 - spaCy 3.5 läuft nur mit Python bis 3.11 und nur mit numpy 1.x.
-- Streamlit entfernt abgekündigte Optionen auch innerhalb von 1.x (z. B. `use_container_width`). Deshalb sind Streamlit und PyMuPDF in `requirements.txt` nach oben begrenzt (PyMuPDF 2.x braucht Python 3.11, daher zwei Zeilen mit `python_version`); die Grenze erst anheben, wenn die App mit der neuen Version getestet ist. Abkündigungen erscheinen als Warnung im Terminalfenster.
+- Streamlit entfernt abgekündigte Optionen auch innerhalb von 1.x (z. B. `use_container_width`). Deshalb sind Streamlit und PyMuPDF in `requirements.txt` nach oben begrenzt (zwei Zeilen mit `python_version`); die Grenze erst anheben, wenn die App mit der neuen Version getestet ist. Abkündigungen erscheinen als Warnung im Terminalfenster.
+- **PyMuPDF 2.0 und 2.1 nicht verwenden:** Sie verschieben nach dem Schwärzen den Rest der Zeile nach links unter den Balken; die Exportprüfung meldet dann „Text unter dem Balken“. Test `test_folgetext_bleibt_an_seiner_stelle` schlägt in dem Fall an.
 - Die gewählte Seite liegt in `st.session_state.seite` (Schlüssel des Seitenzahl-Feldes). Pfeile und „Bearbeiten“ ändern sie per `on_click`, weil Streamlit den Wert eines Widgets nach dessen Anzeige im selben Durchlauf nicht mehr ändern lässt.
 - Ohne `headless = true` wartet Streamlit beim allerersten Start im Terminal auf eine E-Mail-Eingabe.
 - Ohne `address = "localhost"` ist Streamlit im ganzen Netzwerk erreichbar und fragt die öffentliche IP-Adresse ab.
@@ -107,3 +108,4 @@ Die App ist nur ad hoc signiert, nicht notarisiert. macOS fragt beim ersten Öff
 | 0.6.0 | 12.11.2026 | Begründung je Fundstelle, Prüfwarteschlange (zu prüfen vor eindeutig), IBAN-Prüfziffer, Suche, „Alle schwärzen/freigeben“ ohne Lernen, Ansicht Original/Ergebnis/Beide, gleiche Angaben gemeinsam entscheiden, Rückgängig/Wiederholen, Export einzelner Seiten; Erkennung von Kennnummern (mit Prüfziffer), Geburtsdatum nur mit Kontext und Gesundheitsangaben |
 | 0.7.0 | 13.11.2026 | Markieren in der Vorschau (Klick auf Wort, Bereich aufziehen für Handschrift, Unterschrift, Stempel), „Begriff schwärzen“ mit Trefferzahl, tolerant auf Scans, standardmäßig nur für dieses Dokument; Formularzeilen auf Scans |
 | 0.7.1 | 13.11.2026 | Behoben: Ansichtswechsel brach nach zweitem Klick auf die aktive Auswahl ab; gedrehte Seiten (Markierungen, Klicks und Exportprüfung lagen daneben); alter Klick wurde beim Zurückblättern erneut ausgeführt. Neu: Seite drehen (⟳), Hinweis bei quer liegendem Scan, Kategorie und Notiz für Markierungen von Hand |
+| 0.7.2 | 13.11.2026 | Behoben: Nach dem Schwärzen rutschte der Text rechts vom Balken nach links unter den Balken (Fehler in PyMuPDF 2.x), Exportprüfung meldete „Text unter dem Balken“. PyMuPDF auf 1.28.x festgelegt |

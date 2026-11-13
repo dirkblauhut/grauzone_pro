@@ -7,9 +7,10 @@ streamlit-image-coordinates>=0.4.1,<0.5
 # Streamlit braucht PyArrow für Bauteile wie streamlit-image-coordinates. PyArrow ab 23
 # verlangt numpy 2, das spaCy 3.5 nicht verträgt (Versionskette L2); 22.0.0 ist getestet.
 pyarrow>=14,<23
-# PyMuPDF 2.x braucht Python 3.11; ältere Python-Versionen bleiben bei 1.26.
-# Beide Reihen sind getestet. Grenzen erst nach einem Test anheben.
-pymupdf>=2.1,<2.2; python_version >= "3.11"
+# PyMuPDF 2.0 und 2.1 verschieben nach apply_redactions() den Rest der Zeile nach links
+# unter den Balken (Exportprüfung: „Text unter dem Balken“). 1.28.2 ist fehlerfrei und
+# getestet; vor einem Wechsel auf 2.x Test test_folgetext_bleibt_an_seiner_stelle prüfen.
+pymupdf>=1.28.2,<2.0; python_version >= "3.11"
 pymupdf>=1.26.5,<1.27; python_version < "3.11"
 pillow
 # EasyOCR 1.7.2 ist getestet (Wortgrenzen per width_ths). Grenze erst nach einem

@@ -155,5 +155,33 @@ class GedrehteSeite(unittest.TestCase):
         self.assertEqual((595, 842), (round(seite.rect.width), round(seite.rect.height)))
 
 
+class Folgetext(unittest.TestCase):
+    """Behoben (0.7.2): Mit PyMuPDF 2.0/2.1 rutschte nach dem Schwärzen der Rest der Zeile
+    nach links unter den Balken; die Exportprüfung meldete „Text unter dem Balken“."""
+    def setUp(self):
+        doc = pymupdf.open()
+        text_seite(doc, ["Heute rief Frau Erika Mustermann wegen der Kundennummer: K-4711-0815 an.",
+                         "Ihre Telefonnummer 0221 1234567 ist tagsueber erreichbar."])
+        self.daten = als_bytes(doc)
+        self.seiten = scanne(self.daten)
+
+    def test_folgetext_bleibt_an_seiner_stelle(self):
+        _, woerter, funde, _ = self.seiten[0]
+        geschwaerzt = {i for f in funde for i in f.woerter}
+        # Alle stehen gebliebenen Wörter (das kleine Sprachmodell meldet je nach Version weitere)
+        vorher = {w.text: w.rect[0] for i, w in enumerate(woerter) if i not in geschwaerzt}
+        self.assertIn("wegen", vorher)
+        ergebnis, _ = exportiere(self.daten, self.seiten)
+        nachher = {w[4]: w[0] for w in pymupdf.open(stream=ergebnis, filetype="pdf")[0].get_text("words")}
+        for wort, x in vorher.items():
+            self.assertAlmostEqual(x, nachher.get(wort, -1), delta=0.5,
+                                   msg=f"„{wort}“ wurde beim Schwärzen verschoben (PyMuPDF-Version prüfen)")
+
+    def test_pruefung_besteht_bei_namen_mitten_im_satz(self):
+        ergebnis, _ = exportiere(self.daten, self.seiten)
+        rechtecke = {0: [E.wort_rechteck(self.seiten[0][1][i], f) for f in self.seiten[0][2] for i in f.woerter]}
+        self.assertEqual([], E.pruefe_export(ergebnis, rechtecke))
+
+
 if __name__ == "__main__":
     unittest.main()

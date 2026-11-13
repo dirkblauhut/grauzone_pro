@@ -974,7 +974,7 @@ with col_r:
                              "sondern prüfen:\n\n" + "\n".join(f"- {m}" for m in meldungen))
                 else:
                     st.success(f"{anzahl} Stellen auf {seiten} Seite(n) geschwärzt. "
-                               "Exportprüfung bestanden (Text, Balken, Metadaten, Lesezeichen, Anhänge).")
+                               "Exportprüfung bestanden (Text, Balken, Metadaten, Lesezeichen, Anhänge, verborgene Inhalte).")
                 d1, d2, d3 = st.columns(3)
                 d1.download_button("📥 Geschwärztes PDF", daten, namen[0],
                                    mime="application/pdf", width="stretch")

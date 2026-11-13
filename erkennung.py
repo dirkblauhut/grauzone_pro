@@ -779,6 +779,11 @@ def oeffne_pdf(daten: bytes, drehung: dict[int, int] | None = None):
     (z. B. "Name") und Anmerkungen (z. B. Notizen) liegen außerhalb davon und
     blieben sonst lesbar über den Balken stehen.
 
+    Verborgene Inhalte werden sichtbar gemacht, damit Scan und Schwärzen sie erfassen:
+    ausgeblendete Ebenen (Optional Content) werden eingeblendet, und der sichtbare
+    Seitenausschnitt (CropBox) wird auf die ganze Seite (MediaBox) gesetzt. Beschnittene
+    Seiten sehen danach größer aus (vom Nutzer so gewählt, 0.8.0).
+
     Gedrehte Seiten (Eintrag /Rotate) werden so umgeschrieben, dass die Seite ohne
     Drehung genauso aussieht. Sonst lägen Textpositionen (ungedreht) und Seitenbild
     (gedreht) in verschiedenen Koordinatensystemen: Markierungen, Klicks und die
@@ -787,6 +792,13 @@ def oeffne_pdf(daten: bytes, drehung: dict[int, int] | None = None):
     """
     import pymupdf
     doc = pymupdf.open(stream=daten, filetype="pdf")
+    if _ebenen_einblenden(doc):
+        # Der Ebenenzustand wirkt erst nach erneutem Öffnen
+        doc = pymupdf.open(stream=doc.tobytes(), filetype="pdf")
+    for page in doc:
+        if _beschnitten(page):
+            m = page.mediabox   # Rohwerte der MediaBox (PDF-Koordinaten)
+            doc.xref_set_key(page.xref, "CropBox", f"[{m.x0:g} {m.y0:g} {m.x1:g} {m.y1:g}]")
     for page in doc:
         for widget in page.widgets():
             try:
@@ -800,6 +812,28 @@ def oeffne_pdf(daten: bytes, drehung: dict[int, int] | None = None):
             page.set_rotation((page.rotation + zusatz) % 360)
             page.remove_rotation()
     return doc
+
+
+def _beschnitten(page) -> bool:
+    """Sichtbarer Ausschnitt kleiner als die Seite? Verglichen werden die Größen, weil
+    page.cropbox und page.mediabox bei verschobenem Ursprung verschieden gezählt werden."""
+    m, c = page.mediabox, page.cropbox
+    return abs(m.width - c.width) > 0.5 or abs(m.height - c.height) > 0.5
+
+
+def _ebenen_einblenden(doc) -> bool:
+    """Alle Ebenen einschalten (Standardzustand, ohne Alternativ- und Automatikzustände).
+    Liefert True, wenn das Dokument Ebenen hat."""
+    if not doc.get_ocgs():
+        return False
+    cat = doc.pdf_catalog()
+    for schluessel, wert in (("OCProperties/D/OFF", "[]"), ("OCProperties/D/BaseState", "/ON"),
+                             ("OCProperties/D/AS", "null"), ("OCProperties/Configs", "null")):
+        try:
+            doc.xref_set_key(cat, schluessel, wert)
+        except Exception:
+            pass
+    return True
 
 
 def seitenauswahl(text: str, n: int) -> list[int]:
@@ -863,6 +897,12 @@ def bereinige_pdf(doc) -> None:
 
     Dazu gehören XMP-Metadaten (zweiter Metadatensatz neben dem Info-Wörterbuch),
     Lesezeichen und eingebettete Dateien. Alle drei können Namen enthalten.
+
+    Seit 0.8.0 außerdem (Projektprüfung 2026-11-13): Verknüpfungen nach außen (z. B.
+    mailto:-Adressen), Seitenbezeichnungen, JavaScript und automatische Aktionen,
+    Strukturbaum (Alternativtexte, Tags), Formular-Reste (AcroForm, XFA), Vorschaubilder
+    der Seiten (zeigen das ungeschwärzte Bild), Metadaten einzelner Objekte, Ebenen.
+    Der Strukturbaum geht verloren; Screenreader lesen das Ergebnis ohne Tags.
     """
     doc.set_metadata({})
     try:
@@ -878,6 +918,59 @@ def bereinige_pdf(doc) -> None:
             doc.embfile_del(name)
         except Exception:
             pass
+    import pymupdf
+    for page in doc:
+        for link in page.get_links():
+            if link.get("kind") not in (pymupdf.LINK_GOTO, pymupdf.LINK_NAMED):
+                page.delete_link(link)
+    cat = doc.pdf_catalog()
+    for schluessel in ("PageLabels", "OpenAction", "AA", "StructTreeRoot", "MarkInfo", "AcroForm",
+                       "PieceInfo", "Threads", "SpiderInfo", "OCProperties", "Names/JavaScript"):
+        _schluessel_entfernen(doc, cat, schluessel)
+    for xref in range(1, doc.xref_length()):
+        if xref == cat:
+            continue
+        for schluessel in ("AA", "Thumb", "PieceInfo", "Metadata", "StructParents", "B"):
+            _schluessel_entfernen(doc, xref, schluessel)
+
+
+def _schluessel_entfernen(doc, xref: int, schluessel: str) -> None:
+    try:
+        if doc.xref_get_key(xref, schluessel)[0] != "null":
+            doc.xref_set_key(xref, schluessel, "null")
+    except Exception:
+        pass
+
+
+def verborgene_reste(doc) -> list[str]:
+    """Meldungen zu verborgenen Inhalten, die nach dem Export nicht mehr da sein dürfen."""
+    import pymupdf
+    meldungen = []
+    beschnitten = [str(i + 1) for i, page in enumerate(doc) if _beschnitten(page)]
+    if beschnitten:
+        meldungen.append(f"Seitenausschnitt kleiner als die Seite (Inhalt am Rand verborgen): Seite {', '.join(beschnitten)}.")
+    if any(not e.get("on", True) for e in doc.get_ocgs().values()):
+        meldungen.append("Ausgeblendete Ebenen vorhanden.")
+    aussen = sum(1 for page in doc for link in page.get_links()
+                 if link.get("kind") not in (pymupdf.LINK_GOTO, pymupdf.LINK_NAMED))
+    if aussen:
+        meldungen.append(f"{aussen} Verknüpfung(en) nach außen (z. B. E-Mail- oder Internetadresse) vorhanden.")
+    cat = doc.pdf_catalog()
+    vorhanden = lambda xref, k: doc.xref_get_key(xref, k)[0] != "null"
+    if vorhanden(cat, "PageLabels"):
+        meldungen.append("Seitenbezeichnungen vorhanden.")
+    if vorhanden(cat, "OpenAction") or vorhanden(cat, "AA") or vorhanden(cat, "Names/JavaScript") \
+            or any(vorhanden(page.xref, "AA") for page in doc):
+        meldungen.append("JavaScript oder automatische Aktionen vorhanden.")
+    if vorhanden(cat, "StructTreeRoot"):
+        meldungen.append("Strukturbaum (z. B. Alternativtexte) vorhanden.")
+    if vorhanden(cat, "AcroForm"):
+        meldungen.append("Formular-Reste (AcroForm/XFA) vorhanden.")
+    if any(vorhanden(page.xref, "Thumb") for page in doc):
+        meldungen.append("Vorschaubilder der Seiten vorhanden.")
+    if any(x != cat and vorhanden(x, "Metadata") for x in range(1, doc.xref_length())):
+        meldungen.append("Metadaten an einzelnen Objekten (z. B. Bildern) vorhanden.")
+    return meldungen
 
 
 def pruefe_export(daten: bytes, rechtecke: dict[int, list[tuple[float, float, float, float]]],
@@ -890,7 +983,9 @@ def pruefe_export(daten: bytes, rechtecke: dict[int, list[tuple[float, float, fl
     die Meldungen nennen dann die Seitenzahl im Original.
     Geprüft wird (1) Text unter den Balken, (2) Helligkeit der Balken im gerenderten
     Bild (deckt Scans ab), (3) Metadaten, XMP, Lesezeichen, eingebettete Dateien,
-    (4) verbliebene Anmerkungen und Formularfelder.
+    (4) verbliebene Anmerkungen und Formularfelder, (5) verborgene Inhalte
+    (`verborgene_reste`: Seitenausschnitt, Ebenen, Verknüpfungen nach außen,
+    Seitenbezeichnungen, JavaScript, Strukturbaum, Formular-Reste, Vorschaubilder).
     """
     import pymupdf
     meldungen: list[str] = []
@@ -933,6 +1028,7 @@ def pruefe_export(daten: bytes, rechtecke: dict[int, list[tuple[float, float, fl
             meldungen.append("Lesezeichen vorhanden.")
         if doc.embfile_names():
             meldungen.append("Eingebettete Dateien vorhanden.")
+        meldungen += verborgene_reste(doc)
         anm = sum(1 for page in doc for _ in page.annots())
         if anm:
             meldungen.append(f"{anm} Anmerkung(en) vorhanden.")
@@ -1007,7 +1103,9 @@ def pruefprotokoll(*, version: str, modell: str, zeitpunkt: str, original: bytes
     else:
         z.append("Ergebnis: **bestanden**")
     z += ["", "Geprüft am fertigen PDF: Text und Helligkeit unter jedem Balken, Dokumenteigenschaften, "
-              "XMP-Metadaten, Lesezeichen, eingebettete Dateien, Anmerkungen, Formularfelder. "
+              "XMP-Metadaten, Lesezeichen, eingebettete Dateien, Anmerkungen, Formularfelder, "
+              "verborgene Inhalte (Seitenausschnitt, Ebenen, Verknüpfungen nach außen, Seitenbezeichnungen, "
+              "JavaScript, Strukturbaum, Formular-Reste, Vorschaubilder). "
               "Das Markdown wird aus denselben Fundstellen erzeugt und nicht gesondert geprüft.", "",
           "## Hinweise", "",
           "- Die automatische Erkennung ist nicht vollständig. Das Ergebnis ersetzt keine Prüfung durch eine Person.",

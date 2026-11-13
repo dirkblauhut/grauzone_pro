@@ -142,5 +142,103 @@ class EinzelneSeiten(unittest.TestCase):
         self.assertTrue(any(m.startswith("Seite 3:") for m in meldung), meldung)
 
 
+def roh_enthaelt(daten: bytes, wort: str) -> bool:
+    """Sucht ein Wort in allen Objekten und entpackten Datenströmen des PDFs (auch hex/UTF-16)."""
+    doc = pymupdf.open(stream=daten, filetype="pdf")
+    muster = [wort.encode(), wort.encode().hex().encode(), wort.encode("utf-16-be").hex().encode()]
+    for x in range(1, doc.xref_length()):
+        teile = [doc.xref_object(x, compressed=True).encode("latin1", "ignore")]
+        try:
+            if doc.xref_is_stream(x):
+                teile.append(doc.xref_stream(x) or b"")
+        except Exception:
+            pass
+        blob = b" ".join(teile)
+        if any(m in blob or m in blob.lower() for m in muster):
+            return True
+    return False
+
+
+class VerborgeneInhalte(unittest.TestCase):
+    """Behoben (0.8.0, Projektprüfung 2026-11-13): Diese Inhalte überlebten den Export, und
+    die Exportprüfung meldete „bestanden“. Erfundene Daten."""
+
+    @staticmethod
+    def seite():
+        from hilfen import text_seite
+        doc = pymupdf.open()
+        return doc, text_seite(doc, ["Sehr geehrte Frau Erika Mustermann,", "Telefon 0221 1234567"])
+
+    def exportiert(self, doc, *geheim):
+        from hilfen import scanne, exportiere
+        daten = doc.tobytes()
+        meldungen_vorher = E.verborgene_reste(pymupdf.open(stream=daten, filetype="pdf"))
+        seiten = scanne(daten)
+        ergebnis, _ = exportiere(daten, seiten)
+        rechtecke = {p: [E.wort_rechteck(s[1][i], f) for f in s[2] for i in f.woerter]
+                     for p, s in enumerate(seiten)}
+        self.assertEqual([], E.pruefe_export(ergebnis, rechtecke))
+        for wort in geheim:
+            self.assertFalse(roh_enthaelt(ergebnis, wort), f"„{wort}“ steht noch in der Datei")
+        return meldungen_vorher
+
+    def test_text_ausserhalb_des_seitenausschnitts(self):
+        doc, seite = self.seite()
+        seite.insert_text((72, 760), "Vermerk: Frau Berta Musterfrau", fontsize=11)
+        seite.set_cropbox(pymupdf.Rect(0, 0, 595, 600))
+        vorher = self.exportiert(doc, "Musterfrau", "Mustermann")
+        self.assertTrue(any("Seitenausschnitt" in m for m in vorher), "Prüfung erkennt den Beschnitt")
+
+    def test_verschobener_ursprung_ist_kein_beschnitt(self):
+        doc, seite = self.seite()
+        seite.set_mediabox(pymupdf.Rect(-20, -30, 575, 812))
+        self.assertEqual([], E.verborgene_reste(pymupdf.open(stream=doc.tobytes(), filetype="pdf")))
+        seite = E.oeffne_pdf(doc.tobytes())[0]
+        self.assertEqual((595, 842), (round(seite.rect.width), round(seite.rect.height)))
+
+    def test_ausgeblendete_ebene(self):
+        doc, seite = self.seite()
+        seite.insert_text((72, 200), "Frau Berta Musterfrau", fontsize=11, oc=doc.add_ocg("Verborgen", on=False))
+        vorher = self.exportiert(doc, "Musterfrau")
+        self.assertIn("Ausgeblendete Ebenen vorhanden.", vorher)
+
+    def test_verknuepfung_mit_mail_adresse(self):
+        doc, seite = self.seite()
+        seite.insert_link({"kind": pymupdf.LINK_URI, "from": pymupdf.Rect(72, 300, 300, 320),
+                           "uri": "mailto:berta.musterfrau@example.org"})
+        vorher = self.exportiert(doc, "musterfrau@")
+        self.assertTrue(any("Verknüpfung" in m for m in vorher))
+
+    def test_interne_verknuepfung_bleibt(self):
+        doc, _ = self.seite()
+        doc.new_page()
+        doc[0].insert_link({"kind": pymupdf.LINK_GOTO, "from": pymupdf.Rect(72, 300, 300, 320), "page": 1})
+        ergebnis, _ = E.schwaerze(doc.tobytes(), {0: []})
+        self.assertEqual(1, len(pymupdf.open(stream=ergebnis, filetype="pdf")[0].get_links()))
+
+    def test_seitenbezeichnung(self):
+        doc, _ = self.seite()
+        doc.set_page_labels([{"startpage": 0, "prefix": "Musterfrau-", "style": "D", "firstpagenum": 1}])
+        self.assertIn("Seitenbezeichnungen vorhanden.", self.exportiert(doc, "Musterfrau"))
+
+    def test_javascript_beim_oeffnen(self):
+        doc, _ = self.seite()
+        doc.xref_set_key(doc.pdf_catalog(), "OpenAction", "<</S/JavaScript/JS(app.alert\\('Akte Musterfrau'\\))>>")
+        self.assertIn("JavaScript oder automatische Aktionen vorhanden.", self.exportiert(doc, "Musterfrau"))
+
+    def test_strukturbaum_und_vorschaubild(self):
+        doc, seite = self.seite()
+        alt = doc.get_new_xref()
+        doc.update_object(alt, "<</Type/StructElem/S/Figure/Alt(Foto von Berta Musterfrau)>>")
+        doc.xref_set_key(doc.pdf_catalog(), "StructTreeRoot", f"<</Type/StructTreeRoot/K {alt} 0 R>>")
+        bild = doc.get_new_xref()
+        doc.update_object(bild, "<<>>")
+        doc.update_stream(bild, b"Vorschau Musterfrau")
+        doc.xref_set_key(seite.xref, "Thumb", f"{bild} 0 R")
+        vorher = self.exportiert(doc, "Musterfrau")
+        self.assertIn("Strukturbaum (z. B. Alternativtexte) vorhanden.", vorher)
+        self.assertIn("Vorschaubilder der Seiten vorhanden.", vorher)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -47,7 +47,7 @@ class Fund:
 ARTEN = {
     "PER": "Person", "ORT": "Ort", "ORG": "Organisation", "TEL": "Telefon",
     "MAIL": "E-Mail", "IBAN": "IBAN", "ADR": "Anschrift", "KENN": "Kennnummer",
-    "GEB": "Geburtsdatum", "GES": "Gesundheit", "LISTE": "gelernt",
+    "GEB": "Geburtsdatum", "GES": "Gesundheit", "LISTE": "gelernt", "HAND": "von Hand",
 }
 
 # --- 1. Wörter holen ----------------------------------------------------------
@@ -189,13 +189,17 @@ BEGRUENDUNG = {
     "GES_KONTEXT": "Gesundheitsangabe nach „leidet an“, „erkrankt an“ o. ä.",
     "GES_WORT": "Krankheit, Behinderung oder Medikament aus der Wortliste",
     "ICD": "ICD-10-Code",
+    "BEGRIFF": "Begriff schwärzen (nur dieses Dokument)",
+    "BEGRIFF_OCR": "ähnlich wie ein Begriff zum Schwärzen (Texterkennung)",
+    "LISTE_OCR": "ähnlich wie ein gelernter Begriff (Texterkennung)",
+    "FORMULARZEILE": "steht im Formular rechts neben einer Feldbezeichnung (Scan)",
 }
 # Quellen, die für sich allein eindeutig sind. Alle anderen (Sprachmodell, Vornamenliste,
 # E-Mail aus Texterkennung, IBAN ohne gültige Prüfziffer) gelten als „zu prüfen“, solange
 # nicht zwei verschiedene Quellen dieselbe Stelle finden. Keine Prozentwerte: spaCy
 # liefert keine verlässlichen Wahrscheinlichkeiten.
 EINDEUTIG = {"ANREDE", "FELD", "UMBRUCH", "TEL", "MAIL", "IBAN", "PLZ", "STRASSE", "LISTE",
-             "KENN_FELD", "KENN_PZ", "GEB", "GEBURTSORT", "GES_FELD", "ICD"}
+             "KENN_FELD", "KENN_PZ", "GEB", "GEBURTSORT", "GES_FELD", "ICD", "BEGRIFF"}
 
 # --- Kennnummern -----------------------------------------------------------------
 # Vom Nutzer festgelegt (2026-11-12): Kunden-, Patienten- und Vertragsnummern sowie
@@ -387,7 +391,128 @@ def ist_eindeutig(fund: Fund) -> bool:
     return bool(EINDEUTIG & set(fund.quellen)) or len(set(fund.quellen)) >= 2
 
 
-def finde(text: str, woerter: list[Wort], nlp, vornamen: set[str], gelernt: list[str]) -> list[Fund]:
+# --- Begriffe tolerant suchen (Texterkennung verwechselt Zeichen) ---------------
+_OCR_GLEICH = str.maketrans({"0": "o", "1": "l", "i": "l", "|": "l", "!": "l", "5": "s", "8": "b", "6": "b"})
+
+
+def _ocr_form(s: str) -> str:
+    """Vergleichsform für Texterkennung: klein, ohne Satzzeichen, Verwechslungen vereinheitlicht."""
+    return re.sub(r"[\W_]", "", s.lower()).translate(_OCR_GLEICH)
+
+
+def _abstand(a: str, b: str) -> int:
+    """Levenshtein-Abstand (Einfügen, Löschen, Ersetzen je 1)."""
+    vorher = list(range(len(b) + 1))
+    for i, ca in enumerate(a, 1):
+        jetzt = [i]
+        for j, cb in enumerate(b, 1):
+            jetzt.append(min(vorher[j] + 1, jetzt[j - 1] + 1, vorher[j - 1] + (ca != cb)))
+        vorher = jetzt
+    return vorher[-1]
+
+
+def begriff_treffer(text: str, woerter: list[Wort], begriff: str) -> tuple[list[tuple[int, int]], list[tuple[int, int]]]:
+    """Fundstellen eines Begriffs: (genau, ähnlich). Ähnlich nur bei Wörtern aus der
+    Texterkennung: typische Verwechslungen gleich, dazu ein abweichendes Zeichen ab
+    5 Buchstaben, zwei ab 10. Mehrteilige Begriffe dürfen als ein Wort erkannt sein."""
+    begriff = begriff.strip()
+    genau = [(m.start(), m.end()) for m in
+             re.finditer(r"(?<!\w)" + re.escape(begriff) + r"(?!\w)", text, re.IGNORECASE)]
+    ziel = _ocr_form(begriff)
+    if len(ziel) < 3:
+        return genau, []
+    erlaubt = 2 if len(ziel) >= 10 else 1 if len(ziel) >= 5 else 0
+    aehnlich = []
+    for anzahl in sorted({len(begriff.split()), 1}):
+        for i in range(len(woerter) - anzahl + 1):
+            gruppe = woerter[i:i + anzahl]
+            if not all(w.ocr for w in gruppe) or "\n" in text[gruppe[0].start:gruppe[-1].ende]:
+                continue
+            kandidat = _ocr_form("".join(w.text for w in gruppe))
+            if abs(len(kandidat) - len(ziel)) > erlaubt or _abstand(kandidat, ziel) > erlaubt:
+                continue
+            s, e = gruppe[0].start, gruppe[-1].ende
+            if not any(gs < e and ge > s for gs, ge in genau + aehnlich):
+                aehnlich.append((s, e))
+    return genau, aehnlich
+
+
+# --- Formularzeilen auf Scans ------------------------------------------------------
+# Feldbezeichnung am Zeilenanfang -> Art der Einträge rechts daneben. Handschrift liest die
+# Texterkennung oft falsch, ihre Wortpositionen stimmen aber meist. „Ort/Datum“ fehlt
+# absichtlich: Daten bleiben lesbar (Nutzer 2026-11-12).
+FORMULAR_LABEL = re.compile(
+    r"(?i:(Herr\s*/\s*Fr\w*|Herrn?|Frau|Name|Vorname|Nachname|Familienname|Geburtsname)"
+    r"|(geboren\s+am|Geburtsdatum|geb\.)|(Geburtsort)|(Anschrift|Wohnort|wohnhaft|Stra(?:ß|ss)e))[ \t]*:?")
+FORMULAR_ARTEN = {1: "PER", 2: "GEB", 3: "ORT", 4: "ADR"}
+
+
+def formularzeilen(text: str, woerter: list[Wort]) -> list[tuple[int, int, str, str]]:
+    """Spans der Wörter rechts neben einer Feldbezeichnung (nur Texterkennung). Geometrisch:
+    gleiche Höhe wie die Bezeichnung (mit Spielraum für größere Handschrift), höchstens 6 Wörter."""
+    spans = []
+    for m in FORMULAR_LABEL.finditer(text):
+        zeilenanfang = text.rfind("\n", 0, m.start()) + 1
+        if text[zeilenanfang:m.start()].strip():
+            continue
+        label = [i for i, w in enumerate(woerter) if w.start < m.end() and w.ende > m.start()]
+        if not label or not all(woerter[i].ocr for i in label):
+            continue
+        y0 = min(woerter[i].rect[1] for i in label)
+        y1 = max(woerter[i].rect[3] for i in label)
+        x1 = max(woerter[i].rect[2] for i in label)
+        h = y1 - y0
+        # Rest des Label-Worts (z. B. „Herr/Frau“ als ein Wort) zählt nicht als Eintrag
+        kandidaten = sorted(
+            (j for j, w in enumerate(woerter)
+             if j not in label and w.ocr and w.rect[0] >= x1 - 1
+             and y0 - 0.7 * h <= (w.rect[1] + w.rect[3]) / 2 <= y1 + 0.7 * h),
+            key=lambda j: woerter[j].rect[0])
+        gewaehlt = []
+        for j in kandidaten:
+            if FORMULAR_LABEL.fullmatch(woerter[j].text.strip()) or len(gewaehlt) == 6:
+                break
+            gewaehlt.append(j)
+        art = FORMULAR_ARTEN[m.lastindex]
+        for lauf in _laeufe(sorted(gewaehlt)):
+            spans.append((woerter[lauf[0]].start, woerter[lauf[-1]].ende, art, "FORMULARZEILE"))
+    return spans
+
+
+def _laeufe(indizes: list[int]) -> list[list[int]]:
+    """Teilt sortierte Wortindizes in Folgen aufeinanderfolgender Indizes."""
+    laeufe: list[list[int]] = []
+    for i in indizes:
+        if laeufe and i == laeufe[-1][-1] + 1:
+            laeufe[-1].append(i)
+        else:
+            laeufe.append([i])
+    return laeufe
+
+
+# --- Markieren von Hand ---------------------------------------------------------------
+
+def wort_an_punkt(woerter: list[Wort], x: float, y: float, toleranz: float = 2.0) -> int | None:
+    """Index des Wortes unter dem Punkt (PDF-Punkte); bei mehreren das kleinste."""
+    flaeche = [(w.rect[2] - w.rect[0]) * (w.rect[3] - w.rect[1]) for w in woerter]
+    beste = None
+    for i, w in enumerate(woerter):
+        x0, y0, x1, y1 = w.rect
+        if x0 - toleranz <= x <= x1 + toleranz and y0 - toleranz <= y <= y1 + toleranz:
+            if beste is None or flaeche[i] < flaeche[beste]:
+                beste = i
+    return beste
+
+
+def woerter_im_bereich(woerter: list[Wort], rect: tuple[float, float, float, float]) -> list[int]:
+    """Wörter, deren Mittelpunkt im Rechteck liegt (für Markdown und Anzeige)."""
+    x0, y0, x1, y1 = rect
+    return [i for i, w in enumerate(woerter)
+            if x0 <= (w.rect[0] + w.rect[2]) / 2 <= x1 and y0 <= (w.rect[1] + w.rect[3]) / 2 <= y1]
+
+
+def finde(text: str, woerter: list[Wort], nlp, vornamen: set[str], gelernt: list[str],
+          begriffe: list[str] = ()) -> list[Fund]:
     spans: list[tuple[int, int, str, str]] = []   # Anfang, Ende, Art, Quelle
 
     if nlp is not None:
@@ -443,6 +568,20 @@ def finde(text: str, woerter: list[Wort], nlp, vornamen: set[str], gelernt: list
                     and text[w.ende:woerter[i + 1].start].strip() == "":
                 ende = woerter[i + 1].ende
             spans.append((w.start, ende, "PER", "VORNAME"))
+
+    # Begriffe zum Schwärzen nur für dieses Dokument und gelernte Begriffe, auf Scans auch ähnlich
+    for liste, art, q_genau, q_aehnlich in ((begriffe, "HAND", "BEGRIFF", "BEGRIFF_OCR"),
+                                           (gelernt, "LISTE", "LISTE", "LISTE_OCR")):
+        for begriff in liste:
+            if len(begriff.strip()) < 2:
+                continue
+            genau, aehnlich = begriff_treffer(text, woerter, begriff)
+            spans += [(s_, e_, art, q_aehnlich) for s_, e_ in aehnlich]
+            if art == "HAND":   # gelernte Begriffe: genaue Treffer folgen unten wie bisher
+                spans += [(s_, e_, art, q_genau) for s_, e_ in genau]
+
+    # Formularzeilen auf Scans (Handschrift neben gedruckter Feldbezeichnung)
+    spans += formularzeilen(text, woerter)
 
     # Gelernte Begriffe (Blacklist)
     for begriff in gelernt:
@@ -504,7 +643,7 @@ def finde(text: str, woerter: list[Wort], nlp, vornamen: set[str], gelernt: list
             bereinigt.append((s, e, art, quelle))
     bereinigt.sort()
     zusammen: list[list] = []
-    rang = ["LISTE", "IBAN", "KENN", "MAIL", "TEL", "GEB", "GES", "PER", "ADR", "ORT", "ORG"]
+    rang = ["HAND", "LISTE", "IBAN", "KENN", "MAIL", "TEL", "GEB", "GES", "PER", "ADR", "ORT", "ORG"]
     for s, e, art, quelle in bereinigt:
         if zusammen and s < zusammen[-1][1]:
             letzte = zusammen[-1]
@@ -554,7 +693,7 @@ def wort_rechteck(wort: Wort, fund: Fund) -> tuple[float, float, float, float]:
 PLATZHALTER = {
     "PER": "Person", "ORT": "Ort", "ORG": "Organisation", "TEL": "Telefon",
     "MAIL": "E-Mail", "IBAN": "IBAN", "ADR": "Anschrift", "KENN": "Kennnummer",
-    "GEB": "Geburtsdatum", "GES": "Gesundheitsangabe", "LISTE": "geschwärzt",
+    "GEB": "Geburtsdatum", "GES": "Gesundheitsangabe", "LISTE": "geschwärzt", "HAND": "geschwärzt",
 }
 _MD_ZEICHEN = re.compile(r"([\\`*_\[\]<>#|~])")
 _MD_ZEILENANFANG = re.compile(r"^(\s*)(?:([-+>=])|(\d+)([.)]))(?=\s|$)")
@@ -780,7 +919,8 @@ def pruefe_export(daten: bytes, rechtecke: dict[int, list[tuple[float, float, fl
 
 def pruefprotokoll(*, version: str, modell: str, zeitpunkt: str, original: bytes, export: bytes,
                    seiten_gesamt: int, quellen: dict[int, str], funde: dict[int, list],
-                   gewaehlt, balken: int, meldungen: list[str], exportiert: list[int] | None = None) -> str:
+                   gewaehlt, balken: int, meldungen: list[str], exportiert: list[int] | None = None,
+                   von_hand: int = 0) -> str:
     """Prüfprotokoll als Markdown, ohne Originaldaten (kein Dateiname, kein Text der Fundstellen).
 
     quellen:  Seitenindex -> "Textebene" oder "Texterkennung" (nur gescannte Seiten)
@@ -788,6 +928,7 @@ def pruefprotokoll(*, version: str, modell: str, zeitpunkt: str, original: bytes
     gewaehlt: Funktion (Seitenindex, Fund) -> bool
     meldungen: Ergebnis von pruefe_export (leer = bestanden)
     exportiert: nur diese Seiten (0-basiert) wurden exportiert, None = alle
+    von_hand: Anzahl der in der Vorschau von Hand markierten Wörter und Bereiche
     """
     import hashlib
     seiten = list(range(seiten_gesamt)) if exportiert is None else list(exportiert)
@@ -824,7 +965,10 @@ def pruefprotokoll(*, version: str, modell: str, zeitpunkt: str, original: bytes
         z.append(f"| {ARTEN.get(art, art)} | {g} | {s} | {g - s} |")
     z.append(f"| **Summe** | **{summe[0]}** | **{summe[1]}** | **{summe[0] - summe[1]}** |")
     z += ["", f"Abgewählt heißt: von der prüfenden Person nicht zur Schwärzung ausgewählt "
-              f"({summe[0] - summe[1]} Stelle(n)). Geschwärzte Balken im PDF: {balken}.", "",
+              f"({summe[0] - summe[1]} Stelle(n)). Geschwärzte Balken im PDF: {balken}."]
+    if von_hand:
+        z.append(f"Zusätzlich in der Vorschau von Hand markiert (Wörter und Bereiche): {von_hand}.")
+    z += ["",
           "## Exportprüfung", ""]
     if meldungen:
         z += ["Ergebnis: **nicht bestanden**", ""] + [f"- {m}" for m in meldungen]

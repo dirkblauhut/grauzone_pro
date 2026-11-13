@@ -273,5 +273,76 @@ class Gesundheit(unittest.TestCase):
         self.assertIn("[Kennnummer 1]", md)
 
 
+def ocr_zeile(*teile, y=100.0, h=10.0):
+    """Wörter aus der Texterkennung: (Text, x0, x1[, y0, y1]) -> eine Zeile."""
+    woerter = []
+    for t in teile:
+        text, x0, x1 = t[:3]
+        y0, y1 = (t[3], t[4]) if len(t) > 3 else (y, y + h)
+        woerter.append(E.Wort(text, (x0, y0, x1, y1), ocr=True))
+    return woerter
+
+
+class BegriffTolerant(unittest.TestCase):
+    def test_verwechslungen_nur_bei_texterkennung(self):
+        t, w = E.seitentext([ocr_zeile(("Herr", 0, 30), ("FEL1X", 40, 80), ("Beispiel", 90, 150))])
+        genau, nah = E.begriff_treffer(t, w, "Felix")
+        self.assertEqual([], genau)
+        self.assertEqual(["FEL1X"], [t[s_:e_] for s_, e_ in nah])
+        # Gleicher Text aus der Textebene: nur genaue Treffer
+        t2, w2 = E.seitentext(zeilen_aus("Herr FEL1X Beispiel"))
+        self.assertEqual(([], []), E.begriff_treffer(t2, w2, "Felix"))
+
+    def test_ein_zeichen_abweichung_ab_fuenf_buchstaben(self):
+        t, w = E.seitentext([ocr_zeile(("Musterrnann", 0, 80), ("Muster", 90, 130))])
+        self.assertEqual(["Musterrnann"], [t[s_:e_] for s_, e_ in E.begriff_treffer(t, w, "Mustermann")[1]])
+        t, w = E.seitentext([ocr_zeile(("Mayr", 0, 30))])
+        self.assertEqual([], E.begriff_treffer(t, w, "Maier")[1], "kurze Wörter nur bei gleicher Form")
+
+    def test_mehrteiliger_begriff_als_ein_wort(self):
+        t, w = E.seitentext([ocr_zeile(("ERIKAMUSTERMANN", 0, 120))])
+        self.assertEqual(1, len(E.begriff_treffer(t, w, "Erika Mustermann")[1]))
+
+    def test_begriff_nur_fuer_dieses_dokument(self):
+        t, w = E.seitentext(zeilen_aus("Gut Musterhof liegt am See"))
+        f = fund(E.finde(t, w, None, set(), [], ["Musterhof"]), "Musterhof")
+        self.assertEqual(("HAND", ("BEGRIFF",)), (f.art, f.quellen))
+        self.assertTrue(E.ist_eindeutig(f))
+
+
+class Formularzeilen(unittest.TestCase):
+    def test_handschrift_rechts_neben_feldbezeichnung(self):
+        # Handschrift größer und etwas höher als die gedruckte Bezeichnung, Text falsch gelesen
+        zeile1 = ocr_zeile(("Herr/Frau", 0, 50), ("8LAVHVT", 80, 160, 94, 116), ("FEL1X", 180, 230, 95, 115))
+        zeile2 = ocr_zeile(("geboren", 0, 40, 130, 140), ("am", 44, 56, 130, 140), ("2S.O9.2OO8", 90, 170, 125, 145))
+        zeile3 = ocr_zeile(("hat", 0, 15, 160, 170), ("bestanden", 300, 350, 160, 170))
+        t, w = E.seitentext([zeile1, zeile2, zeile3])
+        fs = E.finde(t, w, None, set(), [])
+        self.assertIn(("8LAVHVT FEL1X", "PER", False), {(f.text, f.art, E.ist_eindeutig(f)) for f in fs})
+        self.assertIn(("2S.O9.2OO8", "GEB", False), {(f.text, f.art, E.ist_eindeutig(f)) for f in fs})
+        self.assertFalse(any("bestanden" in f.text for f in fs))
+
+    def test_nur_am_zeilenanfang_und_nur_bei_scans(self):
+        t, w = E.seitentext([ocr_zeile(("Danke", 0, 30), ("Frau", 40, 60), ("XYZ", 70, 100))])
+        self.assertEqual([], E.formularzeilen(t, w), "Feldbezeichnung nicht am Zeilenanfang")
+        t, w = E.seitentext(zeilen_aus("Name: XYZ 123"))
+        self.assertEqual([], E.formularzeilen(t, w), "Textebene: keine Formularzeilen")
+
+
+class MarkierenVonHand(unittest.TestCase):
+    def test_wort_an_punkt_und_bereich(self):
+        w = ocr_zeile(("Erika", 10, 40), ("Mustermann", 50, 110))
+        self.assertEqual(1, E.wort_an_punkt(w, 60, 105))
+        self.assertIsNone(E.wort_an_punkt(w, 200, 105))
+        self.assertEqual([0, 1], E.woerter_im_bereich(w, (0, 90, 120, 120)))
+        self.assertEqual([1], E.woerter_im_bereich(w, (45, 90, 120, 120)))
+
+    def test_protokoll_nennt_markierungen(self):
+        prot = E.pruefprotokoll(version="t", modell="m", zeitpunkt="z", original=b"a", export=b"b",
+                                seiten_gesamt=1, quellen={0: "Textebene"}, funde={0: []},
+                                gewaehlt=lambda p, f: True, balken=2, meldungen=[], von_hand=2)
+        self.assertIn("von Hand markiert (Wörter und Bereiche): 2", prot)
+
+
 if __name__ == "__main__":
     unittest.main()

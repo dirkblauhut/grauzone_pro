@@ -1,6 +1,12 @@
 # Streamlit entfernt abgekündigte Optionen auch in 1.x-Versionen. Obergrenze
 # erst anheben, wenn die App mit der neuen Version getestet ist.
 streamlit>=1.50,<1.68
+# Klick und Rechteck in der Vorschau (Markieren von Hand); MIT, nur Browser-Code ohne Netzwerkzugriff.
+# Nutzt components.v1 wie zur_seite_scrollen: beim Anheben der Streamlit-Grenze mitprüfen.
+streamlit-image-coordinates>=0.4.1,<0.5
+# Streamlit braucht PyArrow für Bauteile wie streamlit-image-coordinates. PyArrow ab 23
+# verlangt numpy 2, das spaCy 3.5 nicht verträgt (Versionskette L2); 22.0.0 ist getestet.
+pyarrow>=14,<23
 # PyMuPDF 2.x braucht Python 3.11; ältere Python-Versionen bleiben bei 1.26.
 # Beide Reihen sind getestet. Grenzen erst nach einem Test anheben.
 pymupdf>=2.1,<2.2; python_version >= "3.11"

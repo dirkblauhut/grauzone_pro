@@ -79,7 +79,7 @@ Die App ist nur ad hoc signiert, nicht notarisiert. macOS fragt beim ersten Öff
 - **Bei Scans etwas breitere Balken:** EasyOCR kennt Wortgrenzen nur ungefähr. Anteilig geschätzte Wortteile bekommen viel Rand, dabei verschwindet manchmal ein Buchstabe des Nachbarworts.
 - **Mehrseitige echte Dokumente** sind noch nicht getestet, ebenso **Windows** und der Gatekeeper-Dialog nach einem echten Download.
 - **Gelernte „nie schwärzen“-Begriffe** gelten überall. Ein versehentlich abgewähltes Wort (z. B. ein Nachname, seit 0.6.0 auch eine Diagnose oder Kennnummer) wird danach in allen Dokumenten übersehen, bis man es wieder anhakt, mit ↶ zurücknimmt oder das Gedächtnis löscht.
-- **Unterschriften, Fotos, Stempel, Handschrift** lassen sich nicht schwärzen, weil sie kein Text sind (geplant: Bereich von Hand schwärzen).
+- **Handschrift** liest die Texterkennung oft falsch. Seit 0.7.0 schlagen Formularzeilen auf Scans Einträge neben Feldbezeichnungen vor; Unterschriften, Stempel und Fotos lassen sich mit „✋ Markieren“ als Bereich schwärzen.
 - **Lange Dokumente:** Die Texterkennung dauert etwa 15 bis 20 Sekunden pro Scan-Seite auf der CPU.
 - **Notarisierung** bräuchte ein Apple-Entwicklerkonto (99 €/Jahr).
 - **Lizenz:** Grauzone steht unter MIT. PyMuPDF steht unter AGPL. Solange die Bibliotheken bei der Einrichtung geladen und nicht mitgeliefert werden, ist das unproblematisch; beim PyInstaller-Weg nicht.
@@ -105,3 +105,4 @@ Die App ist nur ad hoc signiert, nicht notarisiert. macOS fragt beim ersten Öff
 | 0.5.1 | 12.11.2026 | Fundstellenliste erscheint nach dem Scannen sofort, nicht erst nach dem Zeichnen aller Vorschauseiten |
 | 0.5.2 | 12.11.2026 | Dateinamen des Exports ohne Namen des Originaldokuments (`<Datum>_<Uhrzeit>_Anonymisiert.pdf`/`.md`, `…_Pruefprotokoll.md`); EasyOCR auf 1.7.x begrenzt |
 | 0.6.0 | 12.11.2026 | Begründung je Fundstelle, Prüfwarteschlange (zu prüfen vor eindeutig), IBAN-Prüfziffer, Suche, „Alle schwärzen/freigeben“ ohne Lernen, Ansicht Original/Ergebnis/Beide, gleiche Angaben gemeinsam entscheiden, Rückgängig/Wiederholen, Export einzelner Seiten; Erkennung von Kennnummern (mit Prüfziffer), Geburtsdatum nur mit Kontext und Gesundheitsangaben |
+| 0.7.0 | 13.11.2026 | Markieren in der Vorschau (Klick auf Wort, Bereich aufziehen für Handschrift, Unterschrift, Stempel), „Begriff schwärzen“ mit Trefferzahl, tolerant auf Scans, standardmäßig nur für dieses Dokument; Formularzeilen auf Scans |

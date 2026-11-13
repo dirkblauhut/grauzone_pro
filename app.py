@@ -1,4 +1,5 @@
 import base64
+import copy
 import hashlib
 import io
 import json
@@ -13,6 +14,7 @@ import spacy
 import streamlit as st
 import streamlit.components.v1 as components
 from PIL import Image, ImageDraw
+from streamlit_image_coordinates import streamlit_image_coordinates
 
 import erkennung as E
 
@@ -91,7 +93,8 @@ def in_liste(text, liste):
 
 # --- 3. SESSION STATE ---
 for key, start in [("last_uploaded_file", None), ("woerter", {}), ("auswahl", {}), ("export", None),
-                   ("verlauf", []), ("wiederholen", []), ("gemeinsam", True)]:
+                   ("verlauf", []), ("wiederholen", []), ("gemeinsam", True),
+                   ("hand", []), ("hand_nr", 0), ("begriffe", []), ("begriff_meldung", [])]:
     if key not in st.session_state:
         st.session_state[key] = start
 if 'kb' not in st.session_state:
@@ -122,10 +125,11 @@ def funde_der_seite(p):
     daten = st.session_state.woerter.get(p)
     if not daten:
         return []
-    schluessel = (p, id(daten), tuple(kb["blacklist"]))
+    schluessel = (p, id(daten), tuple(kb["blacklist"]), tuple(st.session_state.begriffe))
     speicher = st.session_state.setdefault("funde_speicher", {})
     if schluessel not in speicher:
-        speicher[schluessel] = E.finde(daten["text"], daten["woerter"], nlp, NAME_DATABASE, kb["blacklist"])
+        speicher[schluessel] = E.finde(daten["text"], daten["woerter"], nlp, NAME_DATABASE, kb["blacklist"],
+                                       st.session_state.begriffe)
     return speicher[schluessel]
 
 
@@ -140,7 +144,7 @@ def rechtecke(p, fund):
 
 
 GRUPPEN = {"Alle": None, "Personen": {"PER", "GEB"}, "Kontakte": {"TEL", "MAIL", "ADR"},
-           "Weitere": {"ORT", "ORG", "IBAN", "KENN", "GES", "LISTE"}}
+           "Weitere": {"ORT", "ORG", "IBAN", "KENN", "GES", "LISTE", "HAND"}}
 
 
 def passt(fund, gruppe, suche):
@@ -149,10 +153,38 @@ def passt(fund, gruppe, suche):
     return (arten is None or fund.art in arten) and (not suche or suche.lower() in fund.text.lower())
 
 
+def hand_der_seite(p):
+    """Von Hand markierte Wörter und Bereiche einer Seite."""
+    return [e for e in st.session_state.hand if e["p"] == p]
+
+
 def zu_schwaerzen():
-    """Rechtecke aller gewählten Fundstellen je gescannter Seite (Export und Ergebnisansicht)."""
-    return {p: [r for fund in funde_der_seite(p) if ist_gewaehlt(p, fund) for r in rechtecke(p, fund)]
-            for p in sorted(st.session_state.woerter)}
+    """Rechtecke aller gewählten Fundstellen je gescannter Seite und aller eingeschalteten
+    Markierungen von Hand (auch auf nicht gescannten Seiten); Export und Ergebnisansicht."""
+    balken = {p: [r for fund in funde_der_seite(p) if ist_gewaehlt(p, fund) for r in rechtecke(p, fund)]
+              for p in sorted(st.session_state.woerter)}
+    for e in st.session_state.hand:
+        if e["an"]:
+            balken.setdefault(e["p"], []).append(tuple(e["rect"]))
+    return dict(sorted(balken.items()))
+
+
+def hand_funde(p):
+    """Markierungen von Hand als Fundstellen für das Markdown: das Wort selbst bzw. die Wörter,
+    deren Mitte im Bereich liegt. Nur eingeschaltete Markierungen auf gescannten Seiten."""
+    daten = st.session_state.woerter.get(p)
+    if not daten:
+        return []
+    woerter = daten["woerter"]
+    funde = []
+    for e in hand_der_seite(p):
+        if not e["an"]:
+            continue
+        indizes = [e["wort"]] if e["art"] == "WORT" else E.woerter_im_bereich(woerter, e["rect"])
+        for lauf in E._laeufe(sorted(i for i in indizes if i is not None and i < len(woerter))):
+            s_, e_ = woerter[lauf[0]].start, woerter[lauf[-1]].ende
+            funde.append(E.Fund(daten["text"][s_:e_], "HAND", lauf, s_, e_, ("HAND",)))
+    return funde
 
 
 oeffne_pdf = E.oeffne_pdf   # Formularfelder und Anmerkungen fest in die Seite (siehe erkennung.py)
@@ -177,6 +209,15 @@ def vorschau(doc, datei_id, p, zoom):
                     draw.rectangle(box, fill=(220, 30, 30, 70), outline=(200, 0, 0, 255), width=2)
                 else:
                     draw.rectangle(box, outline=(150, 150, 150, 255), width=1)
+    # Markierungen von Hand: kräftiger Rand, damit sie sich von erkannten Stellen abheben
+    draw = ImageDraw.Draw(bild, "RGBA")
+    for e in hand_der_seite(p):
+        x0, y0, x1, y1 = e["rect"]
+        box = [x0 * zoom, y0 * zoom, x1 * zoom, y1 * zoom]
+        if e["an"]:
+            draw.rectangle(box, fill=(220, 30, 30, 80), outline=(120, 0, 0, 255), width=3)
+        else:
+            draw.rectangle(box, outline=(150, 150, 150, 255), width=2)
     return bild
 
 
@@ -364,6 +405,9 @@ if uploaded_file is not None and uploaded_file.name != st.session_state.last_upl
     st.session_state.ergebnis = None
     st.session_state.verlauf = []
     st.session_state.wiederholen = []
+    st.session_state.hand = []
+    st.session_state.begriffe = []
+    st.session_state.begriff_meldung = []
     st.rerun()
 
 if not uploaded_file:
@@ -392,7 +436,8 @@ n = len(doc)
 datei_id = (uploaded_file.name, len(file_content))
 if not 1 <= st.session_state.get("seite", 1) <= n:
     st.session_state.seite = 1
-for key, start in [("zoom", 1.0), ("alle_zeigen", n > 1), ("filter", "Alle"), ("ansicht", "Original")]:
+for key, start in [("zoom", 1.0), ("alle_zeigen", n > 1), ("filter", "Alle"), ("ansicht", "Original"),
+                   ("werkzeug", "Ansehen")]:
     st.session_state.setdefault(key, start)
 p_id = st.session_state.seite - 1
 
@@ -429,7 +474,8 @@ def haken_zuruecksetzen(ausser=None):
 def zustand(beschreibung):
     wissen = st.session_state.kb
     return (beschreibung, dict(st.session_state.auswahl),
-            {"whitelist": list(wissen["whitelist"]), "blacklist": list(wissen["blacklist"])})
+            {"whitelist": list(wissen["whitelist"]), "blacklist": list(wissen["blacklist"])},
+            copy.deepcopy(st.session_state.hand), list(st.session_state.begriffe))
 
 
 def merke(beschreibung):
@@ -439,8 +485,10 @@ def merke(beschreibung):
 
 
 def stelle_her(eintrag):
-    _, auswahl, wissen = eintrag
+    _, auswahl, wissen, hand, begriffe = eintrag
     st.session_state.auswahl = dict(auswahl)
+    st.session_state.hand = copy.deepcopy(hand)
+    st.session_state.begriffe = list(begriffe)
     if wissen != {k: st.session_state.kb[k] for k in ("whitelist", "blacklist")}:
         st.session_state.kb = {"whitelist": list(wissen["whitelist"]), "blacklist": list(wissen["blacklist"])}
         save_knowledge(st.session_state.kb)
@@ -466,15 +514,22 @@ def haken_geaendert(p, fund, key):
     """Haken von Hand gesetzt oder entfernt. Nur hier wird gelernt: abgewählt -> nie
     schwärzen; wieder gewählt -> Eintrag entfernen. Sammelaktionen lernen nicht.
     Mit „Gleiche Angaben gemeinsam“ gilt die Entscheidung für alle Seiten."""
-    wert = st.session_state[key]
+    entscheide(p, fund, st.session_state[key], ausser=key)
+
+
+def entscheide(p, fund, wert, ausser=None):
+    """Eine Fundstelle schwärzen oder freigeben, von Hand (Checkbox oder Klick in der Vorschau).
+    Lernt „nie schwärzen“, außer bei eigenen Begriffen dieses Dokuments (Art HAND)."""
     merke(f"„{fund.text}“ {'geschwärzt' if wert else 'freigegeben'}")
     seiten = vorkommen().get(gleich(fund.text), [p]) if st.session_state.gemeinsam else [p]
     for q in set(seiten) | {p}:
         for f in funde_der_seite(q):
             if gleich(f.text) == gleich(fund.text):
                 st.session_state.auswahl[(q, f.text.lower())] = wert
-    haken_zuruecksetzen(ausser=key)
+    haken_zuruecksetzen(ausser=ausser)
     st.session_state.export = None
+    if fund.art == "HAND":
+        return
     wissen = st.session_state.kb
     if not wert and not in_liste(fund.text, wissen["whitelist"]):
         wissen["whitelist"].append(fund.text)
@@ -507,6 +562,106 @@ for i, fund in enumerate(funde_der_seite(p_id)):
         if st.session_state.auswahl.get((p_id, fund.text.lower())) != neu:
             st.session_state.auswahl[(p_id, fund.text.lower())] = neu
             st.session_state.export = None   # Export passt nicht mehr zur Auswahl
+
+
+# --- Markieren von Hand in der Vorschau ---
+
+def hand_neu(p, art, rect, wort=None, text=""):
+    st.session_state.hand_nr += 1
+    st.session_state.hand.append({"id": st.session_state.hand_nr, "p": p, "art": art,
+                                  "rect": tuple(rect), "wort": wort, "text": text, "an": True})
+    st.session_state.export = None
+
+
+def hand_umschalten(eintrag_id, key):
+    eintrag = next(e for e in st.session_state.hand if e["id"] == eintrag_id)
+    merke(f"Markierung von Hand {'eingeschaltet' if st.session_state[key] else 'ausgeschaltet'}")
+    for e in st.session_state.hand:
+        if e["id"] == eintrag_id:
+            e["an"] = st.session_state[key]
+    st.session_state.export = None
+    del eintrag
+
+
+def hand_loeschen(eintrag_id):
+    merke("Markierung von Hand gelöscht")
+    st.session_state.hand = [e for e in st.session_state.hand if e["id"] != eintrag_id]
+    st.session_state.pop(f"hand_{eintrag_id}", None)
+    st.session_state.export = None
+
+
+def klick_verarbeiten(p, wert, seite_breite, seite_hoehe):
+    """Klick oder Rechteck aus der Vorschau (Bildpunkte) in PDF-Punkte umrechnen und umsetzen.
+    Ziehen: Bereich schwärzen. Klick: Wort schwärzen oder freigeben bzw. eigene Markierung entfernen.
+    Liefert eine Meldung für die Oberfläche oder None."""
+    faktor = seite_breite / max(wert["width"], 1)
+    if "x1" in wert:
+        x1, y1, x2, y2 = (wert["x1"] * faktor, wert["y1"] * faktor, wert["x2"] * faktor, wert["y2"] * faktor)
+    else:
+        x1 = x2 = wert["x"] * faktor
+        y1 = y2 = wert["y"] * faktor
+    if abs(x2 - x1) > 4 or abs(y2 - y1) > 4:
+        rect = (max(0.0, min(x1, x2)), max(0.0, min(y1, y2)),
+                min(seite_breite, max(x1, x2)), min(seite_hoehe, max(y1, y2)))
+        merke(f"Bereich auf Seite {p + 1} markiert")
+        hand_neu(p, "BEREICH", rect, text="Bereich")
+        return None
+    daten = st.session_state.woerter.get(p)
+    if not daten:
+        return "Seite noch nicht gescannt: Wörter lassen sich erst nach dem Scannen anklicken. Bereiche (Ziehen) gehen immer."
+    woerter = daten["woerter"]
+    i = E.wort_an_punkt(woerter, x1, y1)
+    if i is None:
+        return "Dort steht kein erkanntes Wort. Zum Schwärzen mit gedrückter Maustaste einen Bereich aufziehen."
+    eigene = [e for e in hand_der_seite(p) if e["art"] == "WORT" and e["wort"] == i]
+    if eigene:
+        hand_loeschen(eigene[0]["id"])
+        return None
+    for fund in funde_der_seite(p):
+        if i in fund.woerter:
+            entscheide(p, fund, not ist_gewaehlt(p, fund))
+            return None
+    w = woerter[i]
+    merke(f"Wort „{w.text}“ von Hand markiert")
+    hand_neu(p, "WORT", E.wort_rechteck(w, E.Fund(w.text, "HAND", [i], w.start, w.ende)), wort=i, text=w.text)
+    return None
+
+
+def begriffe_schwaerzen(eingabe, merken):
+    """„Begriff schwärzen“: nur für dieses Dokument oder dauerhaft (gelernt). Meldet die Treffer
+    je Seite, damit sichtbar ist, ob der Begriff im erkannten Text überhaupt vorkommt."""
+    neu = [b.strip() for b in eingabe.split(",") if b.strip()]
+    if not neu:
+        return
+    merke(f"„{', '.join(neu)}“ zum Schwärzen hinzugefügt")
+    meldung = []
+    for begriff in neu:
+        if merken:
+            if not in_liste(begriff, kb["blacklist"]):
+                kb["blacklist"].append(begriff)
+            kb["whitelist"] = [x for x in kb["whitelist"] if x.lower() != begriff.lower()]
+        elif not in_liste(begriff, st.session_state.begriffe):
+            st.session_state.begriffe.append(begriff)
+        je_seite, aehnlich = {}, 0
+        for q in sorted(st.session_state.woerter):
+            daten = st.session_state.woerter[q]
+            genau, nah = E.begriff_treffer(daten["text"], daten["woerter"], begriff)
+            if genau or nah:
+                je_seite[q + 1] = len(genau) + len(nah)
+                aehnlich += len(nah)
+        meldung.append((begriff, je_seite, aehnlich, merken))
+    if merken:
+        save_knowledge(kb)
+    st.session_state.begriff_meldung = meldung
+    st.session_state.export = None
+
+
+def md_funde(p):
+    """Fundstellen fürs Markdown: erkannte und von Hand markierte, ohne Überlappung
+    (eine Markierung von Hand über einer gewählten Fundstelle zählt nicht doppelt)."""
+    erkannt = funde_der_seite(p)
+    belegt = {i for f in erkannt if ist_gewaehlt(p, f) for i in f.woerter}
+    return sorted(erkannt + [f for f in hand_funde(p) if not belegt & set(f.woerter)], key=lambda f: f.start)
 
 
 def zoom_aendern(schritt):
@@ -616,7 +771,7 @@ with col_r:
                                if suche.lower() in st.session_state.woerter[p]["text"].lower()]
                     if im_text:
                         st.caption(f"„{suche}“ steht im Text (Seite {', '.join(map(str, im_text))}), "
-                                   "ist aber keine Fundstelle. Unten über „Fehlt etwas?“ hinzufügen.")
+                                   "ist aber keine Fundstelle. Unten über „Begriff schwärzen“ hinzufügen.")
             st.caption(f"gelesen per {quelle} · Haken = wird geschwärzt")
             # Prüfwarteschlange: zu prüfende Stellen zuerst, dann eindeutige, je in Textreihenfolge.
             # i bleibt die Nummer in der Fundliste (Checkbox-Schlüssel und Anzeige).
@@ -654,20 +809,46 @@ with col_r:
                                     f"</span><br><span class='gz-grund'>{gruende}</span>",
                                     unsafe_allow_html=True)
                     st.session_state.auswahl[(p_id, fund.text.lower())] = wert
+                eigene = [e for e in hand_der_seite(p_id) if not suche or suche.lower() in e["text"].lower()]
+                if eigene and gruppe in ("Alle", "Weitere"):
+                    st.markdown(f"<div class='gz-gruppe'>✋ Von Hand ({len(eigene)})</div>", unsafe_allow_html=True)
+                for e in eigene if gruppe in ("Alle", "Weitere") else []:
+                    with st.container(border=True, key=f"fund_{'an' if e['an'] else 'aus'}_hand_{e['id']}"):
+                        h1, h2 = st.columns([5, 1], vertical_alignment="center")
+                        key = f"hand_{e['id']}"
+                        if st.session_state.get(key) != e["an"]:
+                            st.session_state[key] = e["an"]
+                        h1.checkbox(f"**{e['text']}**", key=key, on_change=hand_umschalten, args=(e["id"], key))
+                        h2.button("🗑", key=f"hand_weg_{e['id']}", on_click=hand_loeschen, args=(e["id"],),
+                                  type="tertiary", help="Markierung löschen")
+                        art = "Wort" if e["art"] == "WORT" else "Bereich"
+                        st.markdown(f"<span class='gz-art'>von Hand · {art} · Seite {p_id + 1}</span><br>"
+                                    "<span class='gz-grund'>in der Vorschau markiert, gilt nur für dieses "
+                                    "Dokument</span>", unsafe_allow_html=True)
 
             with st.form("zusatz", clear_on_submit=True, border=False):
                 zusatz = st.text_input(
-                    "Fehlt etwas?", placeholder="Begriff eingeben, mehrere mit Komma",
-                    help="Der Begriff wird auf allen gescannten Seiten geschwärzt und für künftige Dokumente gemerkt.")
-                if st.form_submit_button("➕ Hinzufügen", width="stretch") and zusatz.strip():
-                    merke(f"„{zusatz.strip()}“ hinzugefügt")
-                    for begriff in [b.strip() for b in zusatz.split(",") if b.strip()]:
-                        if not in_liste(begriff, kb["blacklist"]):
-                            kb["blacklist"].append(begriff)
-                        kb["whitelist"] = [x for x in kb["whitelist"] if x.lower() != begriff.lower()]
-                    save_knowledge(kb)
-                    st.session_state.export = None
+                    "Begriff schwärzen", placeholder="Begriff eingeben, mehrere mit Komma",
+                    help="Sucht den Begriff auf allen gescannten Seiten, auf Scans auch in leicht falsch "
+                         "gelesener Form. Steht er nicht im erkannten Text (z. B. Handschrift), in der "
+                         "Vorschau „Markieren“ wählen und den Bereich aufziehen.")
+                merken = st.checkbox("Auch in künftigen Dokumenten immer schwärzen", key="begriff_merken",
+                                     help="Aus: gilt nur für dieses Dokument. An: wird gelernt "
+                                          "(„immer schwärzen“, Lernfortschritt links).")
+                if st.form_submit_button("➕ Schwärzen", width="stretch") and zusatz.strip():
+                    begriffe_schwaerzen(zusatz, merken)
                     st.rerun()
+            for begriff, je_seite, aehnlich, gemerkt in st.session_state.begriff_meldung:
+                dauer = " Gilt auch für künftige Dokumente." if gemerkt else ""
+                if not st.session_state.woerter:
+                    st.warning(f"„{begriff}“ gemerkt. Treffer gibt es erst nach dem Scannen.")
+                elif je_seite:
+                    seiten = ", ".join(f"Seite {q} ({k})" for q, k in je_seite.items())
+                    hinweis = f" Davon {aehnlich} ähnlich (Texterkennung), bitte prüfen." if aehnlich else ""
+                    st.success(f"„{begriff}“: {sum(je_seite.values())} Treffer, {seiten}.{hinweis}{dauer}")
+                else:
+                    st.warning(f"„{begriff}“ steht nicht im erkannten Text (z. B. Handschrift). In der Vorschau "
+                               f"„Markieren“ wählen und den Bereich mit gedrückter Maustaste aufziehen.{dauer}")
 
     gescannt = sorted(st.session_state.woerter)
     offen = [str(p + 1) for p in range(n) if p not in st.session_state.woerter]
@@ -702,8 +883,8 @@ with col_r:
                     nummern=export_seiten)
                 im_export = [p for p in gescannt if p in export_seiten]
                 md, _ = E.markdown(
-                    [(p, st.session_state.woerter[p]["text"], funde_der_seite(p)) for p in im_export],
-                    ist_gewaehlt,
+                    [(p, st.session_state.woerter[p]["text"], md_funde(p)) for p in im_export],
+                    lambda p, f: f.art == "HAND" and "HAND" in f.quellen or ist_gewaehlt(p, f),
                     kopf=f"Erstellt mit {TITEL} am {date.today():%d.%m.%Y}. "
                          "Gleiche Angaben tragen denselben Platzhalter."
                          + ("" if alle else f" Exportiert: Seite {', '.join(str(p + 1) for p in export_seiten)}."),
@@ -713,7 +894,8 @@ with col_r:
                     zeitpunkt=f"{jetzt:%d.%m.%Y %H:%M}", original=file_content, export=pdf_daten,
                     seiten_gesamt=n, quellen={p: st.session_state.woerter[p]["quelle"] for p in gescannt},
                     funde={p: funde_der_seite(p) for p in gescannt}, gewaehlt=ist_gewaehlt,
-                    balken=anzahl, meldungen=meldungen, exportiert=None if alle else export_seiten)
+                    balken=anzahl, meldungen=meldungen, exportiert=None if alle else export_seiten,
+                    von_hand=sum(1 for e in st.session_state.hand if e["an"] and e["p"] in export_seiten))
                 gescannt_export = len(im_export)
                 # Dateinamen ohne Originalnamen (kann Personennamen enthalten), einmal je Export
                 # festgelegt, damit PDF, Markdown und Protokoll denselben Zeitstempel tragen
@@ -769,6 +951,13 @@ with col_m:
                     help=f"Rückgängig: {verlauf[-1][0]}" if verlauf else "Rückgängig: nichts zu tun")
         u[2].button("↷", key="redo", on_click=wiederholen, disabled=not vor, width="stretch",
                     help=f"Wiederholen: {vor[-1][0]}" if vor else "Wiederholen: nichts zu tun")
+        u[3].segmented_control(
+            "Werkzeug", ["Ansehen", "✋ Markieren"], key="werkzeug", label_visibility="collapsed",
+            help="Markieren: Klick auf ein Wort schwärzt es oder gibt es frei. Mit gedrückter Maustaste "
+                 "einen Bereich aufziehen, um Handschrift, Unterschrift, Stempel oder Fotos zu schwärzen.")
+    if not st.session_state.werkzeug:
+        st.session_state.werkzeug = "Ansehen"
+    markieren = st.session_state.werkzeug != "Ansehen"
     if not st.session_state.ansicht:   # erneuter Klick hebt die Auswahl auf
         st.session_state.ansicht = "Original"
     if st.session_state.ansicht != "Original" and not st.session_state.woerter:
@@ -783,7 +972,25 @@ with col_m:
                 "div:has(>.st-key-vorschau){--h:max(400px,calc(100vh - 230px));"
                 "height:var(--h)!important;flex:0 0 var(--h)!important}</style>",
                 unsafe_allow_html=True)
-    if st.session_state.alle_zeigen and n > 1:
+    if markieren:
+        # Markieren nur in der Einzelansicht des Originals (ein anklickbares Bild statt vieler)
+        st.caption(f"✋ Seite {p_id + 1}: **Klick** auf ein Wort = schwärzen oder freigeben · **Ziehen** mit "
+                   "gedrückter Maustaste = Bereich schwärzen. Der Rahmen erscheint nach dem Loslassen.")
+        meldung = st.session_state.pop("klick_meldung", None)
+        if meldung:
+            st.info(meldung)
+        with st.container(key="einzeln"):
+            wert = streamlit_image_coordinates(
+                vorschau(doc, datei_id, p_id, aufloesung), key=f"klick_{p_id}", width="stretch",
+                click_and_drag=True, image_format="JPEG", jpeg_quality=85, cursor="crosshair")
+        # Der Wert bleibt nach dem Klick bestehen; nur einen neuen Klick verarbeiten
+        if wert and wert.get("unix_time") != st.session_state.get("letzter_klick"):
+            st.session_state.letzter_klick = wert.get("unix_time")
+            seite = doc[p_id].rect
+            st.session_state.klick_meldung = klick_verarbeiten(p_id, wert, seite.width, seite.height)
+            st.rerun()
+        st.session_state.gezeigt = (p_id, False)
+    elif st.session_state.alle_zeigen and n > 1:
         with st.container(height=800, key="vorschau"):
             for p in range(n):
                 k1, k2 = st.columns([3, 1], vertical_alignment="center")
@@ -807,9 +1014,11 @@ with col_m:
 
     funde = funde_der_seite(p_id)
     aktiv = sum(ist_gewaehlt(p_id, f) for f in funde)
+    von_hand = sum(1 for e in hand_der_seite(p_id) if e["an"])
     st.markdown(f"<div class='gz-legende'>Seite {p_id + 1}: {len(funde)} Fundstellen · "
                 f"<span class='rot'>●</span> {aktiv} wird geschwärzt · "
-                f"<span class='grau'>●</span> {len(funde) - aktiv} freigegeben</div>",
+                f"<span class='grau'>●</span> {len(funde) - aktiv} freigegeben"
+                + (f" · ✋ {von_hand} von Hand" if von_hand else "") + "</div>",
                 unsafe_allow_html=True)
 
 # --- Statuszeile ---

@@ -43,6 +43,11 @@ def knopf(at, text):
     return next(b for b in at.button if text in b.label)
 
 
+def haken(at):
+    """Nur die Haken der Fundstellen (nicht z. B. „Auch in künftigen Dokumenten …“)."""
+    return [c for c in at.checkbox if (c.key or "").startswith("cb_")]
+
+
 class AppStart(unittest.TestCase):
     def test_app_startet_ohne_dokument(self):
         at, zurueck = starte()
@@ -63,7 +68,7 @@ class AppDurchlauf(unittest.TestCase):
         at = self.at
         self.assertEqual([], [str(e.value) for e in at.exception])
         self.assertEqual(3, len(at.session_state.woerter))
-        self.assertTrue(at.checkbox, "Fundstellen auf Seite 1 als Haken")
+        self.assertTrue(haken(at), "Fundstellen auf Seite 1 als Haken")
 
         knopf(at, "▶").click().run()
         self.assertEqual(2, at.session_state.seite)
@@ -106,8 +111,8 @@ class AppDurchlauf(unittest.TestCase):
         at = self.at
         knopf(at, "Schwärzen & exportieren").click().run()
         self.assertIsNotNone(at.session_state.export)
-        haken = at.checkbox[0]
-        haken.uncheck().run()
+        erster = haken(at)[0]
+        erster.uncheck().run()
         legende = next(m.value for m in at.markdown if "class='gz-legende'" in m.value)
         self.assertIn("1 freigegeben", legende)
         self.assertIsNone(at.session_state.export, "alter Export passt nicht mehr zur Auswahl")
@@ -119,22 +124,22 @@ class AppDurchlauf(unittest.TestCase):
         self.assertEqual([], at.session_state.kb["whitelist"], "Sammelaktion darf nichts lernen")
         self.assertTrue(at.session_state.auswahl)
         self.assertFalse(any(at.session_state.auswahl.values()), "alle Seiten freigegeben")
-        self.assertFalse(any(c.value for c in at.checkbox))
+        self.assertFalse(any(c.value for c in haken(at)))
         knopf(at, "Alle schwärzen").click().run()
         self.assertTrue(all(at.session_state.auswahl.values()))
-        self.assertTrue(all(c.value for c in at.checkbox))
+        self.assertTrue(all(c.value for c in haken(at)))
 
     def test_haken_von_hand_lernt(self):
         at = self.at
-        name = at.checkbox[0].label.strip("*")
-        at.checkbox[0].uncheck().run()
+        name = haken(at)[0].label.strip("*")
+        haken(at)[0].uncheck().run()
         self.assertIn(name, at.session_state.kb["whitelist"])
 
     def test_suche_filtert_fundstellen(self):
         at = self.at
         at.text_input(key="suche").input("0221").run()
         self.assertEqual([], [str(e.value) for e in at.exception])
-        self.assertEqual(["**0221 1234567**"], [c.label for c in at.checkbox])
+        self.assertEqual(["**0221 1234567**"], [c.label for c in haken(at)])
         self.assertIn("Alle freigeben (1)", knopf(at, "Alle freigeben").label)
 
     def test_ansicht_ergebnis_zeigt_geschwaerztes_pdf(self):
@@ -150,32 +155,32 @@ class AppDurchlauf(unittest.TestCase):
 
     def test_gleiche_angabe_auf_allen_seiten(self):
         at = self.at
-        name = at.checkbox[0].label.strip("*")
+        name = haken(at)[0].label.strip("*")
         self.assertEqual("Erika Mustermann", name)
-        at.checkbox[0].uncheck().run()
+        haken(at)[0].uncheck().run()
         self.assertFalse(at.session_state.auswahl[(2, "erika mustermann")], "auch Seite 3")
 
     def test_gleiche_angabe_nur_diese_seite_wenn_aus(self):
         at = self.at
         at.toggle(key="gemeinsam").set_value(False).run()
-        at.checkbox[0].uncheck().run()
+        haken(at)[0].uncheck().run()
         self.assertNotEqual(False, at.session_state.auswahl.get((2, "erika mustermann")))
 
     def test_rueckgaengig_und_wiederholen(self):
         at = self.at
-        name = at.checkbox[0].label.strip("*")
-        at.checkbox[0].uncheck().run()
+        name = haken(at)[0].label.strip("*")
+        haken(at)[0].uncheck().run()
         self.assertIn(name, at.session_state.kb["whitelist"])
         knopf(at, "↶").click().run()
         self.assertEqual([], [str(e.value) for e in at.exception])
-        self.assertTrue(at.checkbox[0].value)
+        self.assertTrue(haken(at)[0].value)
         self.assertNotIn(name, at.session_state.kb["whitelist"], "Lernen wird mit zurückgenommen")
         knopf(at, "↷").click().run()
-        self.assertFalse(at.checkbox[0].value)
+        self.assertFalse(haken(at)[0].value)
         self.assertIn(name, at.session_state.kb["whitelist"])
         knopf(at, "Alle freigeben").click().run()
         knopf(at, "↶").click().run()
-        self.assertFalse(at.checkbox[0].value, "Sammelaktion zurückgenommen, Haken von Hand bleibt")
+        self.assertFalse(haken(at)[0].value, "Sammelaktion zurückgenommen, Haken von Hand bleibt")
 
     def test_export_einzelner_seiten(self):
         at = self.at
@@ -194,6 +199,52 @@ class AppDurchlauf(unittest.TestCase):
         self.assertIn("Exportiert wurden nur die Seiten 3 (1 von 3)", protokoll)
         self.assertIn("## Seite 3", md)
         self.assertNotIn("## Seite 1", md)
+
+    def begriff(self, text, merken=False):
+        at = self.at
+        next(t for t in at.text_input if t.label == "Begriff schwärzen").input(text)
+        if merken:
+            at.checkbox(key="begriff_merken").check()
+        knopf(at, "Schwärzen").click().run()
+        self.assertEqual([], [str(e.value) for e in at.exception])
+        return at
+
+    def test_begriff_nur_dieses_dokument_mit_trefferzahl(self):
+        at = self.begriff("Gruessen")
+        self.assertEqual([], at.session_state.kb["blacklist"], "ohne Haken nicht gelernt")
+        self.assertEqual(["Gruessen"], at.session_state.begriffe)
+        self.assertTrue(any("1 Treffer, Seite 1 (1)" in m.value for m in at.success))
+        self.assertIn("**Gruessen**", [c.label for c in haken(at)])
+
+    def test_begriff_dauerhaft(self):
+        at = self.begriff("Gruessen", merken=True)
+        self.assertEqual(["Gruessen"], at.session_state.kb["blacklist"])
+        self.assertEqual([], at.session_state.begriffe)
+
+    def test_begriff_ohne_treffer_verweist_auf_markieren(self):
+        at = self.begriff("Unbekanntwort")
+        self.assertTrue(any("steht nicht im erkannten Text" in m.value for m in at.warning))
+
+    def test_bereich_von_hand_wird_geschwaerzt(self):
+        at = self.at
+        # Bereich über der Zeile „Mit freundlichen Gruessen“ (Seite 1, dritte Zeile ab y=72+36)
+        at.session_state.hand = [{"id": 1, "p": 0, "art": "BEREICH", "rect": (60, 95, 400, 112),
+                                  "wort": None, "text": "Bereich", "an": True}]
+        at.session_state.hand_nr = 1
+        at.run()
+        self.assertIn("**Bereich**", [c.label for c in at.checkbox])
+        knopf(at, "Schwärzen & exportieren").click().run()
+        self.assertEqual([], [str(e.value) for e in at.exception])
+        pdf, md, _, _, meldungen, protokoll, _ = at.session_state.export
+        text = pymupdf.open(stream=pdf, filetype="pdf")[0].get_text()
+        self.assertNotIn("Gruessen", text)
+        self.assertEqual([], meldungen)
+        self.assertIn("von Hand markiert (Wörter und Bereiche): 1", protokoll)
+        self.assertNotIn("Gruessen", md, "Markdown ersetzt die Wörter im Bereich")
+        knopf(at, "🗑").click().run()
+        self.assertEqual([], at.session_state.hand)
+        knopf(at, "↶").click().run()
+        self.assertEqual(1, len(at.session_state.hand), "Löschen lässt sich zurücknehmen")
 
 
 if __name__ == "__main__":

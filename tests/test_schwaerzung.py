@@ -126,5 +126,34 @@ class Sensibel(unittest.TestCase):
             self.assertIn(bleibt, text)
 
 
+class GedrehteSeite(unittest.TestCase):
+    """Seite mit /Rotate: Textpositionen, Seitenbild und Balken im selben Koordinatensystem."""
+    def setUp(self):
+        doc = pymupdf.open()
+        text_seite(doc, ["Sehr geehrte Frau Erika Mustermann,", "Telefon 0221 1234567"])
+        doc[0].set_rotation(90)
+        self.daten = als_bytes(doc)
+
+    def test_drehung_wird_aufgeloest(self):
+        seite = E.oeffne_pdf(self.daten)[0]
+        self.assertEqual(0, seite.rotation)
+        self.assertEqual((842, 595), (round(seite.rect.width), round(seite.rect.height)))
+        for x0, y0, x1, y1, *_ in seite.get_text("words"):
+            self.assertTrue(0 <= x0 < x1 <= 842 and 0 <= y0 < y1 <= 595)
+
+    def test_export_besteht_die_pruefung(self):
+        # Behoben (0.7.1): Prüfung meldete „Balken nicht schwarz“, Markierungen lagen daneben
+        seiten = scanne(self.daten)
+        ergebnis, anzahl = exportiere(self.daten, seiten)
+        rechtecke = {0: [E.wort_rechteck(seiten[0][1][i], f) for f in seiten[0][2] for i in f.woerter]}
+        self.assertGreater(anzahl, 0)
+        self.assertEqual([], E.pruefe_export(ergebnis, rechtecke))
+        self.assertNotIn("Mustermann", pymupdf.open(stream=ergebnis, filetype="pdf")[0].get_text())
+
+    def test_zusaetzliche_drehung(self):
+        seite = E.oeffne_pdf(self.daten, {0: 90})[0]
+        self.assertEqual((595, 842), (round(seite.rect.width), round(seite.rect.height)))
+
+
 if __name__ == "__main__":
     unittest.main()

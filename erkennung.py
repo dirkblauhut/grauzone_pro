@@ -48,17 +48,32 @@ ARTEN = {
     "PER": "Person", "ORT": "Ort", "ORG": "Organisation", "TEL": "Telefon",
     "MAIL": "E-Mail", "IBAN": "IBAN", "ADR": "Anschrift", "KENN": "Kennnummer",
     "GEB": "Geburtsdatum", "GES": "Gesundheit", "LISTE": "gelernt", "HAND": "von Hand",
+    "SIGN": "Unterschrift", "STEMPEL": "Stempel", "FOTO": "Foto",
+}
+# Auswahl für Markierungen von Hand: Bezeichnung in der Oberfläche -> Art
+HAND_KATEGORIEN = {
+    "Sonstiges": "HAND", "Name / Person": "PER", "Unterschrift": "SIGN", "Stempel": "STEMPEL", "Foto": "FOTO",
+    "Geburtsdatum": "GEB", "Anschrift": "ADR", "Kennnummer": "KENN", "Gesundheit": "GES",
 }
 
 # --- 1. Wörter holen ----------------------------------------------------------
 
 def woerter_aus_textebene(page) -> list[list[Wort]]:
     """Wörter aus der Textebene, gruppiert nach Zeilen."""
-    zeilen: dict[tuple[int, int], list[Wort]] = {}
-    for x0, y0, x1, y1, txt, block, zeile, _ in page.get_text("words", sort=True):
+    zeilen: dict[tuple[int, int], list[tuple[int, Wort]]] = {}
+    for x0, y0, x1, y1, txt, block, zeile, nr in page.get_text("words", sort=True):
         if txt.strip():
-            zeilen.setdefault((block, zeile), []).append(Wort(txt, (x0, y0, x1, y1)))
-    return [sorted(z, key=lambda w: w.rect[0]) for z in zeilen.values()]
+            zeilen.setdefault((block, zeile), []).append((nr, Wort(txt, (x0, y0, x1, y1))))
+    # Reihenfolge nach Wortnummer der Zeile (Leserichtung), nicht nach x: bei quer
+    # stehendem Text haben alle Wörter einer Zeile fast dasselbe x
+    return [[w for _, w in sorted(z, key=lambda t: t[0])] for z in zeilen.values()]
+
+
+def wirkt_unleserlich(woerter: list[Wort]) -> bool:
+    """Texterkennung hat kaum Wörter gefunden (meist: Seite liegt quer oder steht kopf).
+    Als Wort zählt, was mindestens drei Buchstaben oder Ziffern hat."""
+    brauchbar = sum(1 for w in woerter if sum(c.isalnum() for c in w.text) >= 3)
+    return brauchbar < 3 or brauchbar < 0.3 * len(woerter)
 
 
 def woerter_aus_ocr(reader, page, zoom: float = 2.5) -> list[list[Wort]]:
@@ -694,6 +709,7 @@ PLATZHALTER = {
     "PER": "Person", "ORT": "Ort", "ORG": "Organisation", "TEL": "Telefon",
     "MAIL": "E-Mail", "IBAN": "IBAN", "ADR": "Anschrift", "KENN": "Kennnummer",
     "GEB": "Geburtsdatum", "GES": "Gesundheitsangabe", "LISTE": "geschwärzt", "HAND": "geschwärzt",
+    "SIGN": "Unterschrift", "STEMPEL": "Stempel", "FOTO": "Foto",
 }
 _MD_ZEICHEN = re.compile(r"([\\`*_\[\]<>#|~])")
 _MD_ZEILENANFANG = re.compile(r"^(\s*)(?:([-+>=])|(\d+)([.)]))(?=\s|$)")
@@ -756,12 +772,18 @@ def markdown(seiten, gewaehlt, kopf: str = "", nicht_gescannt=()) -> tuple[str, 
 
 # --- 4. PDF öffnen und schwärzen ------------------------------------------------
 
-def oeffne_pdf(daten: bytes):
+def oeffne_pdf(daten: bytes, drehung: dict[int, int] | None = None):
     """Öffnet das PDF und übernimmt Formularfelder und Anmerkungen fest in die Seiten.
 
     apply_redactions() entfernt nur Seiteninhalt. Werte von Formularfeldern
     (z. B. "Name") und Anmerkungen (z. B. Notizen) liegen außerhalb davon und
     blieben sonst lesbar über den Balken stehen.
+
+    Gedrehte Seiten (Eintrag /Rotate) werden so umgeschrieben, dass die Seite ohne
+    Drehung genauso aussieht. Sonst lägen Textpositionen (ungedreht) und Seitenbild
+    (gedreht) in verschiedenen Koordinatensystemen: Markierungen, Klicks und die
+    Exportprüfung träfen die falsche Stelle. drehung: Seitenindex -> zusätzliche
+    Drehung im Uhrzeigersinn (90, 180, 270), z. B. für quer eingescannte Seiten.
     """
     import pymupdf
     doc = pymupdf.open(stream=daten, filetype="pdf")
@@ -772,6 +794,11 @@ def oeffne_pdf(daten: bytes):
             except Exception:
                 pass
     doc.bake(annots=True, widgets=True)
+    for i, page in enumerate(doc):
+        zusatz = (drehung or {}).get(i, 0) % 360
+        if page.rotation or zusatz:
+            page.set_rotation((page.rotation + zusatz) % 360)
+            page.remove_rotation()
     return doc
 
 
@@ -799,17 +826,19 @@ def seitenauswahl(text: str, n: int) -> list[int]:
     return sorted(seiten)
 
 
-def schwaerze(daten: bytes, rechtecke: dict[int, list[tuple]], seiten: list[int] | None = None) -> tuple[bytes, int]:
+def schwaerze(daten: bytes, rechtecke: dict[int, list[tuple]], seiten: list[int] | None = None,
+              drehung: dict[int, int] | None = None) -> tuple[bytes, int]:
     """Schwärzt physisch: Text, Bildteile und Vektorgrafik unter den Rechtecken
     werden entfernt, nicht nur überdeckt. Metadaten, XMP, Lesezeichen und
     eingebettete Dateien werden gelöscht.
 
     rechtecke: Seitenindex -> Rechtecke (PDF-Punkte); jede genannte Seite wird
     bereinigt, auch mit leerer Liste. seiten: nur diese Seiten (0-basiert, sortiert)
-    exportieren, None = alle. Liefert (PDF-Daten, Anzahl Rechtecke).
+    exportieren, None = alle. drehung wie bei oeffne_pdf (die Rechtecke beziehen sich
+    auf die gedrehte Seite). Liefert (PDF-Daten, Anzahl Rechtecke).
     """
     import pymupdf
-    doc = oeffne_pdf(daten)
+    doc = oeffne_pdf(daten, drehung)
     anzahl = 0
     for p, liste in rechtecke.items():
         if seiten is not None and p not in seiten:
@@ -920,7 +949,7 @@ def pruefe_export(daten: bytes, rechtecke: dict[int, list[tuple[float, float, fl
 def pruefprotokoll(*, version: str, modell: str, zeitpunkt: str, original: bytes, export: bytes,
                    seiten_gesamt: int, quellen: dict[int, str], funde: dict[int, list],
                    gewaehlt, balken: int, meldungen: list[str], exportiert: list[int] | None = None,
-                   von_hand: int = 0) -> str:
+                   von_hand: int = 0, von_hand_arten: dict[str, int] | None = None) -> str:
     """Prüfprotokoll als Markdown, ohne Originaldaten (kein Dateiname, kein Text der Fundstellen).
 
     quellen:  Seitenindex -> "Textebene" oder "Texterkennung" (nur gescannte Seiten)
@@ -929,6 +958,7 @@ def pruefprotokoll(*, version: str, modell: str, zeitpunkt: str, original: bytes
     meldungen: Ergebnis von pruefe_export (leer = bestanden)
     exportiert: nur diese Seiten (0-basiert) wurden exportiert, None = alle
     von_hand: Anzahl der in der Vorschau von Hand markierten Wörter und Bereiche
+    von_hand_arten: dieselben Markierungen je gewählter Kategorie (ohne Notizen)
     """
     import hashlib
     seiten = list(range(seiten_gesamt)) if exportiert is None else list(exportiert)
@@ -967,7 +997,9 @@ def pruefprotokoll(*, version: str, modell: str, zeitpunkt: str, original: bytes
     z += ["", f"Abgewählt heißt: von der prüfenden Person nicht zur Schwärzung ausgewählt "
               f"({summe[0] - summe[1]} Stelle(n)). Geschwärzte Balken im PDF: {balken}."]
     if von_hand:
-        z.append(f"Zusätzlich in der Vorschau von Hand markiert (Wörter und Bereiche): {von_hand}.")
+        je = ", ".join(f"{k} {v}" for k, v in sorted((von_hand_arten or {}).items()))
+        z.append(f"Zusätzlich in der Vorschau von Hand markiert (Wörter und Bereiche): {von_hand}"
+                 + (f" ({je})." if je else "."))
     z += ["",
           "## Exportprüfung", ""]
     if meldungen:

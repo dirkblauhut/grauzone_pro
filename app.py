@@ -94,7 +94,8 @@ def in_liste(text, liste):
 # --- 3. SESSION STATE ---
 for key, start in [("last_uploaded_file", None), ("woerter", {}), ("auswahl", {}), ("export", None),
                    ("verlauf", []), ("wiederholen", []), ("gemeinsam", True),
-                   ("hand", []), ("hand_nr", 0), ("begriffe", []), ("begriff_meldung", [])]:
+                   ("hand", []), ("hand_nr", 0), ("begriffe", []), ("begriff_meldung", []),
+                   ("drehung", {}), ("letzter_klick", {}), ("hand_kategorie", "Sonstiges")]:
     if key not in st.session_state:
         st.session_state[key] = start
 if 'kb' not in st.session_state:
@@ -183,7 +184,8 @@ def hand_funde(p):
         indizes = [e["wort"]] if e["art"] == "WORT" else E.woerter_im_bereich(woerter, e["rect"])
         for lauf in E._laeufe(sorted(i for i in indizes if i is not None and i < len(woerter))):
             s_, e_ = woerter[lauf[0]].start, woerter[lauf[-1]].ende
-            funde.append(E.Fund(daten["text"][s_:e_], "HAND", lauf, s_, e_, ("HAND",)))
+            art = E.HAND_KATEGORIEN.get(e.get("kategorie"), "HAND")
+            funde.append(E.Fund(daten["text"][s_:e_], art, lauf, s_, e_, ("HAND",)))
     return funde
 
 
@@ -228,7 +230,7 @@ def ergebnis_doc():
     schluessel = (datei_id, hashlib.sha256(repr(sorted(balken.items())).encode()).hexdigest()[:16])
     gespeichert = st.session_state.get("ergebnis")
     if not gespeichert or gespeichert[0] != schluessel:
-        daten, _ = E.schwaerze(file_content, balken)
+        daten, _ = E.schwaerze(file_content, balken, drehung=st.session_state.drehung)
         gespeichert = (schluessel, pymupdf.open(stream=daten, filetype="pdf"))
         st.session_state.ergebnis = gespeichert
     return gespeichert
@@ -408,6 +410,8 @@ if uploaded_file is not None and uploaded_file.name != st.session_state.last_upl
     st.session_state.hand = []
     st.session_state.begriffe = []
     st.session_state.begriff_meldung = []
+    st.session_state.drehung = {}
+    st.session_state.letzter_klick = {}
     st.rerun()
 
 if not uploaded_file:
@@ -431,9 +435,10 @@ if not uploaded_file:
     st.stop()
 
 file_content = uploaded_file.getvalue()
-doc = oeffne_pdf(file_content)
+doc = oeffne_pdf(file_content, st.session_state.drehung)
 n = len(doc)
-datei_id = (uploaded_file.name, len(file_content))
+# Kennung für Zwischenspeicher: gedrehte Seiten sehen anders aus
+datei_id = (uploaded_file.name, len(file_content), tuple(sorted(st.session_state.drehung.items())))
 if not 1 <= st.session_state.get("seite", 1) <= n:
     st.session_state.seite = 1
 for key, start in [("zoom", 1.0), ("alle_zeigen", n > 1), ("filter", "Alle"), ("ansicht", "Original"),
@@ -567,20 +572,55 @@ for i, fund in enumerate(funde_der_seite(p_id)):
 # --- Markieren von Hand in der Vorschau ---
 
 def hand_neu(p, art, rect, wort=None, text=""):
+    """Neue Markierung von Hand; Kategorie aus der Vorauswahl über der Vorschau."""
     st.session_state.hand_nr += 1
-    st.session_state.hand.append({"id": st.session_state.hand_nr, "p": p, "art": art,
-                                  "rect": tuple(rect), "wort": wort, "text": text, "an": True})
+    kategorie = st.session_state.get("hand_kategorie") or "Sonstiges"
+    st.session_state.hand.append({"id": st.session_state.hand_nr, "p": p, "art": art, "rect": tuple(rect),
+                                  "wort": wort, "text": text, "an": True, "kategorie": kategorie, "notiz": ""})
     st.session_state.export = None
 
 
 def hand_umschalten(eintrag_id, key):
-    eintrag = next(e for e in st.session_state.hand if e["id"] == eintrag_id)
     merke(f"Markierung von Hand {'eingeschaltet' if st.session_state[key] else 'ausgeschaltet'}")
     for e in st.session_state.hand:
         if e["id"] == eintrag_id:
             e["an"] = st.session_state[key]
     st.session_state.export = None
-    del eintrag
+
+
+def hand_detail(eintrag_id, feld, key):
+    """Kategorie oder Notiz einer Markierung ändern. Die Notiz bleibt in der Oberfläche
+    (nicht im Protokoll oder Markdown); die Kategorie bestimmt Platzhalter und Zählung."""
+    merke(f"Markierung von Hand: {'Kategorie' if feld == 'kategorie' else 'Notiz'} geändert")
+    for e in st.session_state.hand:
+        if e["id"] == eintrag_id:
+            e[feld] = st.session_state[key] or ("Sonstiges" if feld == "kategorie" else "")
+    st.session_state.export = None
+
+
+def seite_drehen(p):
+    """Seite um 90 Grad im Uhrzeigersinn drehen (z. B. quer eingescannt). Die Seite sieht
+    danach anders aus: Scan und Markierungen dieser Seite sowie der Verlauf entfallen."""
+    st.session_state.drehung = {**st.session_state.drehung, p: (st.session_state.drehung.get(p, 0) + 90) % 360}
+    st.session_state.woerter.pop(p, None)
+    st.session_state.hand = [e for e in st.session_state.hand if e["p"] != p]
+    st.session_state.auswahl = {k: v for k, v in st.session_state.auswahl.items() if k[0] != p}
+    st.session_state.funde_speicher = {}
+    st.session_state.verlauf, st.session_state.wiederholen = [], []
+    st.session_state.export = st.session_state.ergebnis = None
+    haken_zuruecksetzen()
+
+
+def ansicht_gewaehlt():
+    """Ergebnis und Beide gibt es nur im Modus Ansehen."""
+    if st.session_state.ansicht in ("Ergebnis", "Beide"):
+        st.session_state.werkzeug = "Ansehen"
+
+
+def werkzeug_gewaehlt():
+    """Markiert wird im Original."""
+    if st.session_state.werkzeug == "✋ Markieren":
+        st.session_state.ansicht = "Original"
 
 
 def hand_loeschen(eintrag_id):
@@ -773,6 +813,10 @@ with col_r:
                         st.caption(f"„{suche}“ steht im Text (Seite {', '.join(map(str, im_text))}), "
                                    "ist aber keine Fundstelle. Unten über „Begriff schwärzen“ hinzufügen.")
             st.caption(f"gelesen per {quelle} · Haken = wird geschwärzt")
+            if quelle == "Texterkennung" and E.wirkt_unleserlich(st.session_state.woerter[p_id]["woerter"]):
+                st.warning("Auf dieser Seite wurde kaum Text erkannt. Liegt sie quer oder steht sie kopf? "
+                           "Dann mit **⟳** in der Werkzeugleiste drehen und die Seite neu scannen. "
+                           "Handschrift lässt sich mit **✋ Markieren** als Bereich schwärzen.")
             # Prüfwarteschlange: zu prüfende Stellen zuerst, dann eindeutige, je in Textreihenfolge.
             # i bleibt die Nummer in der Fundliste (Checkbox-Schlüssel und Anzeige).
             reihe = sorted(((i, f) for i, f in enumerate(funde) if passt(f, gruppe, suche)),
@@ -818,13 +862,28 @@ with col_r:
                         key = f"hand_{e['id']}"
                         if st.session_state.get(key) != e["an"]:
                             st.session_state[key] = e["an"]
-                        h1.checkbox(f"**{e['text']}**", key=key, on_change=hand_umschalten, args=(e["id"], key))
+                        kategorie = e.get("kategorie", "Sonstiges")
+                        name = e["text"] if e["art"] == "WORT" else (e.get("notiz") or kategorie)
+                        h1.checkbox(f"**{name}**", key=key, on_change=hand_umschalten, args=(e["id"], key))
                         h2.button("🗑", key=f"hand_weg_{e['id']}", on_click=hand_loeschen, args=(e["id"],),
                                   type="tertiary", help="Markierung löschen")
                         art = "Wort" if e["art"] == "WORT" else "Bereich"
-                        st.markdown(f"<span class='gz-art'>von Hand · {art} · Seite {p_id + 1}</span><br>"
-                                    "<span class='gz-grund'>in der Vorschau markiert, gilt nur für dieses "
-                                    "Dokument</span>", unsafe_allow_html=True)
+                        st.markdown(f"<span class='gz-art'>von Hand · {art} · {kategorie} · Seite {p_id + 1}"
+                                    "</span>", unsafe_allow_html=True)
+                        d1, d2 = st.columns([1, 1.2])
+                        k_key, n_key = f"hand_kat_{e['id']}", f"hand_notiz_{e['id']}"
+                        if st.session_state.get(k_key) != kategorie:
+                            st.session_state[k_key] = kategorie
+                        if st.session_state.get(n_key) != e.get("notiz", ""):
+                            st.session_state[n_key] = e.get("notiz", "")
+                        d1.selectbox("Kategorie", list(E.HAND_KATEGORIEN), key=k_key, label_visibility="collapsed",
+                                     on_change=hand_detail, args=(e["id"], "kategorie", k_key),
+                                     help="Bestimmt den Platzhalter im Markdown und die Zählung im Protokoll.")
+                        d2.text_input("Notiz", key=n_key, placeholder="Notiz (nur hier sichtbar)",
+                                      label_visibility="collapsed", on_change=hand_detail,
+                                      args=(e["id"], "notiz", n_key),
+                                      help="Eigene Bezeichnung, z. B. „Unterschrift Prüfer“. Bleibt in der "
+                                           "Oberfläche und wird nicht exportiert.")
 
             with st.form("zusatz", clear_on_submit=True, border=False):
                 zusatz = st.text_input(
@@ -876,7 +935,8 @@ with col_r:
                 alle = len(export_seiten) == n
                 balken = zu_schwaerzen()
                 jetzt = datetime.now()
-                pdf_daten, anzahl = E.schwaerze(file_content, balken, None if alle else export_seiten)
+                pdf_daten, anzahl = E.schwaerze(file_content, balken, None if alle else export_seiten,
+                                                st.session_state.drehung)
                 # Prüfung im Export: Seitenindex im Export -> Balken der Originalseite
                 meldungen = E.pruefe_export(
                     pdf_daten, {neu: balken[alt] for neu, alt in enumerate(export_seiten) if alt in balken},
@@ -884,18 +944,21 @@ with col_r:
                 im_export = [p for p in gescannt if p in export_seiten]
                 md, _ = E.markdown(
                     [(p, st.session_state.woerter[p]["text"], md_funde(p)) for p in im_export],
-                    lambda p, f: f.art == "HAND" and "HAND" in f.quellen or ist_gewaehlt(p, f),
+                    lambda p, f: "HAND" in f.quellen or ist_gewaehlt(p, f),
                     kopf=f"Erstellt mit {TITEL} am {date.today():%d.%m.%Y}. "
                          "Gleiche Angaben tragen denselben Platzhalter."
                          + ("" if alle else f" Exportiert: Seite {', '.join(str(p + 1) for p in export_seiten)}."),
                     nicht_gescannt=[p for p in export_seiten if p not in st.session_state.woerter])
+                hand_export = [e for e in st.session_state.hand if e["an"] and e["p"] in export_seiten]
                 protokoll = E.pruefprotokoll(
                     version=VERSION, modell=nlp.meta.get("name", "unbekannt"),
                     zeitpunkt=f"{jetzt:%d.%m.%Y %H:%M}", original=file_content, export=pdf_daten,
                     seiten_gesamt=n, quellen={p: st.session_state.woerter[p]["quelle"] for p in gescannt},
                     funde={p: funde_der_seite(p) for p in gescannt}, gewaehlt=ist_gewaehlt,
                     balken=anzahl, meldungen=meldungen, exportiert=None if alle else export_seiten,
-                    von_hand=sum(1 for e in st.session_state.hand if e["an"] and e["p"] in export_seiten))
+                    von_hand=len(hand_export),
+                    von_hand_arten={k: sum(1 for e in hand_export if e.get("kategorie", "Sonstiges") == k)
+                                    for k in {e.get("kategorie", "Sonstiges") for e in hand_export}})
                 gescannt_export = len(im_export)
                 # Dateinamen ohne Originalnamen (kann Personennamen enthalten), einmal je Export
                 # festgelegt, damit PDF, Markdown und Protokoll denselben Zeitstempel tragen
@@ -927,12 +990,22 @@ with col_r:
 # --- Mittlere Spalte: Werkzeugleiste und Vorschau ---
 with col_m:
     with st.container(key="leiste"):
-        w = st.columns([0.7, 1.1, 0.9, 0.7, 0.4, 0.7, 0.9, 0.7, 2.2], vertical_alignment="center")
+        # Ein zweiter Klick auf die aktive Auswahl hebt sie auf (None). Vor dem Anlegen der
+        # Schalter ersetzen: danach darf ihr Zustand nicht mehr geändert werden (Streamlit-Fehler).
+        if not st.session_state.get("ansicht"):
+            st.session_state.ansicht = "Original"
+        if not st.session_state.get("werkzeug"):
+            st.session_state.werkzeug = "Ansehen"
+        w = st.columns([0.7, 1.1, 0.9, 0.7, 0.7, 0.7, 0.9, 0.7, 2.2], vertical_alignment="center")
         w[0].button("◀", on_click=gehe_zu, args=(p_id,), disabled=p_id == 0, help="Vorige Seite", width="stretch")
         w[1].number_input("Seite", 1, n, key="seite", label_visibility="collapsed")
         w[2].markdown(f"<div class='gz-mitte'>/ {n}</div>", unsafe_allow_html=True)
         w[3].button("▶", on_click=gehe_zu, args=(p_id + 2,), disabled=p_id == n - 1, help="Nächste Seite",
                     width="stretch")
+        w[4].button("⟳", key="drehen", on_click=seite_drehen, args=(p_id,), width="stretch",
+                    help="Seite um 90° im Uhrzeigersinn drehen, z. B. wenn sie quer eingescannt wurde. "
+                         "Danach die Seite neu scannen. Scan, Markierungen und Rückgängig-Verlauf dieser "
+                         "Seite entfallen; die Seite wird gedreht exportiert.")
         w[5].button("−", on_click=zoom_aendern, args=(-0.25,), disabled=st.session_state.zoom <= 0.5,
                     help="Verkleinern", width="stretch")
         w[6].markdown(f"<div class='gz-mitte'>{st.session_state.zoom:.0%}</div>", unsafe_allow_html=True)
@@ -944,6 +1017,7 @@ with col_m:
         u = st.columns([4.2, 0.7, 0.7, 4.4], vertical_alignment="center")
         u[0].segmented_control(
             "Ansicht", ["Original", "Ergebnis", "Beide"], key="ansicht", label_visibility="collapsed",
+            on_change=ansicht_gewaehlt,
             help="Original: Fundstellen markiert (rot = wird geschwärzt). Ergebnis: so sieht das "
                  "geschwärzte PDF mit der aktuellen Auswahl aus. Beide: nebeneinander zum Vergleich.")
         verlauf, vor = st.session_state.verlauf, st.session_state.wiederholen
@@ -953,14 +1027,11 @@ with col_m:
                     help=f"Wiederholen: {vor[-1][0]}" if vor else "Wiederholen: nichts zu tun")
         u[3].segmented_control(
             "Werkzeug", ["Ansehen", "✋ Markieren"], key="werkzeug", label_visibility="collapsed",
+            on_change=werkzeug_gewaehlt,
             help="Markieren: Klick auf ein Wort schwärzt es oder gibt es frei. Mit gedrückter Maustaste "
                  "einen Bereich aufziehen, um Handschrift, Unterschrift, Stempel oder Fotos zu schwärzen.")
-    if not st.session_state.werkzeug:
-        st.session_state.werkzeug = "Ansehen"
-    markieren = st.session_state.werkzeug != "Ansehen"
-    if not st.session_state.ansicht:   # erneuter Klick hebt die Auswahl auf
-        st.session_state.ansicht = "Original"
-    if st.session_state.ansicht != "Original" and not st.session_state.woerter:
+    markieren = st.session_state.werkzeug == "✋ Markieren"
+    if st.session_state.ansicht != "Original" and not zu_schwaerzen():
         st.caption("Noch nichts gescannt: Das Ergebnis entspricht dem Original.")
 
     zoom = st.session_state.zoom
@@ -974,8 +1045,12 @@ with col_m:
                 unsafe_allow_html=True)
     if markieren:
         # Markieren nur in der Einzelansicht des Originals (ein anklickbares Bild statt vieler)
-        st.caption(f"✋ Seite {p_id + 1}: **Klick** auf ein Wort = schwärzen oder freigeben · **Ziehen** mit "
+        m1, m2 = st.columns([3, 1.3], vertical_alignment="center")
+        m1.caption(f"✋ Seite {p_id + 1}: **Klick** auf ein Wort = schwärzen oder freigeben · **Ziehen** mit "
                    "gedrückter Maustaste = Bereich schwärzen. Der Rahmen erscheint nach dem Loslassen.")
+        m2.selectbox("Neue Markierung als", list(E.HAND_KATEGORIEN), key="hand_kategorie",
+                     help="Kategorie für die nächsten Markierungen von Hand. Lässt sich danach an der "
+                          "Karte rechts ändern, dort auch mit eigener Notiz.")
         meldung = st.session_state.pop("klick_meldung", None)
         if meldung:
             st.info(meldung)
@@ -984,8 +1059,9 @@ with col_m:
                 vorschau(doc, datei_id, p_id, aufloesung), key=f"klick_{p_id}", width="stretch",
                 click_and_drag=True, image_format="JPEG", jpeg_quality=85, cursor="crosshair")
         # Der Wert bleibt nach dem Klick bestehen; nur einen neuen Klick verarbeiten
-        if wert and wert.get("unix_time") != st.session_state.get("letzter_klick"):
-            st.session_state.letzter_klick = wert.get("unix_time")
+        # (je Seite gemerkt, sonst würde beim Zurückblättern ein alter Klick erneut ausgeführt)
+        if wert and wert.get("unix_time") != st.session_state.letzter_klick.get(p_id):
+            st.session_state.letzter_klick[p_id] = wert.get("unix_time")
             seite = doc[p_id].rect
             st.session_state.klick_meldung = klick_verarbeiten(p_id, wert, seite.width, seite.height)
             st.rerun()

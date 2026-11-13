@@ -337,6 +337,10 @@ class MarkierenVonHand(unittest.TestCase):
         self.assertEqual([0, 1], E.woerter_im_bereich(w, (0, 90, 120, 120)))
         self.assertEqual([1], E.woerter_im_bereich(w, (45, 90, 120, 120)))
 
+    def test_unleserliche_seite(self):
+        self.assertTrue(E.wirkt_unleserlich(ocr_zeile((";", 0, 5), ("g", 10, 15), ("8", 20, 25), ("2", 30, 35))))
+        self.assertFalse(E.wirkt_unleserlich(ocr_zeile(("Sehr", 0, 20), ("geehrte", 25, 60), ("Frau", 65, 85))))
+
     def test_protokoll_nennt_markierungen(self):
         prot = E.pruefprotokoll(version="t", modell="m", zeitpunkt="z", original=b"a", export=b"b",
                                 seiten_gesamt=1, quellen={0: "Textebene"}, funde={0: []},

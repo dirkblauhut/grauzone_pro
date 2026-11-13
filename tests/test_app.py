@@ -229,22 +229,54 @@ class AppDurchlauf(unittest.TestCase):
         at = self.at
         # Bereich über der Zeile „Mit freundlichen Gruessen“ (Seite 1, dritte Zeile ab y=72+36)
         at.session_state.hand = [{"id": 1, "p": 0, "art": "BEREICH", "rect": (60, 95, 400, 112),
-                                  "wort": None, "text": "Bereich", "an": True}]
+                                  "wort": None, "text": "Bereich", "an": True,
+                                  "kategorie": "Unterschrift", "notiz": "Unterschrift Sachbearbeitung"}]
         at.session_state.hand_nr = 1
         at.run()
-        self.assertIn("**Bereich**", [c.label for c in at.checkbox])
+        self.assertIn("**Unterschrift Sachbearbeitung**", [c.label for c in at.checkbox])
         knopf(at, "Schwärzen & exportieren").click().run()
         self.assertEqual([], [str(e.value) for e in at.exception])
         pdf, md, _, _, meldungen, protokoll, _ = at.session_state.export
         text = pymupdf.open(stream=pdf, filetype="pdf")[0].get_text()
         self.assertNotIn("Gruessen", text)
         self.assertEqual([], meldungen)
-        self.assertIn("von Hand markiert (Wörter und Bereiche): 1", protokoll)
+        self.assertIn("von Hand markiert (Wörter und Bereiche): 1 (Unterschrift 1)", protokoll)
+        self.assertNotIn("Sachbearbeitung", protokoll + md, "Notiz wird nicht exportiert")
         self.assertNotIn("Gruessen", md, "Markdown ersetzt die Wörter im Bereich")
+        self.assertIn("[Unterschrift 1]", md)
         knopf(at, "🗑").click().run()
         self.assertEqual([], at.session_state.hand)
         knopf(at, "↶").click().run()
         self.assertEqual(1, len(at.session_state.hand), "Löschen lässt sich zurücknehmen")
+
+    def test_abgewaehlte_ansicht_bricht_nicht_ab(self):
+        # Behoben (0.7.1): zweiter Klick auf die aktive Auswahl setzte den Schalter auf None,
+        # danach brach jeder Lauf mit einem Streamlit-Fehler ab
+        at = self.at
+        for schluessel, erwartet in (("ansicht", "Original"), ("werkzeug", "Ansehen")):
+            at.session_state[schluessel] = None
+            at.run()
+            self.assertEqual([], [str(e.value) for e in at.exception])
+            self.assertEqual(erwartet, at.session_state[schluessel])
+
+    def test_seite_drehen(self):
+        at = self.at
+        at.session_state.hand = [{"id": 1, "p": 0, "art": "BEREICH", "rect": (60, 95, 400, 112), "wort": None,
+                                  "text": "Bereich", "an": True, "kategorie": "Sonstiges", "notiz": ""}]
+        at.run()
+        knopf(at, "⟳").click().run()
+        self.assertEqual([], [str(e.value) for e in at.exception])
+        self.assertEqual({0: 90}, at.session_state.drehung)
+        self.assertNotIn(0, at.session_state.woerter, "gedrehte Seite muss neu gescannt werden")
+        self.assertEqual([], at.session_state.hand, "Markierungen der Seite passen nicht mehr")
+        knopf(at, "Nur Seite 1 scannen").click().run()
+        knopf(at, "Schwärzen & exportieren").click().run()
+        self.assertEqual([], [str(e.value) for e in at.exception])
+        pdf, _, _, _, meldungen, _, _ = at.session_state.export
+        seite = pymupdf.open(stream=pdf, filetype="pdf")[0]
+        self.assertGreater(seite.rect.width, seite.rect.height, "Seite wird gedreht exportiert")
+        self.assertEqual([], meldungen)
+        self.assertNotIn("Mustermann", seite.get_text())
 
 
 if __name__ == "__main__":

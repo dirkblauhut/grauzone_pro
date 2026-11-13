@@ -68,7 +68,7 @@ Projektvorgaben des Nutzers:
 - Lizenz MIT.
 
 Umgebung und Deployment:
-- Laufzeit: Python 3.11 in `venv/` (vom Installer angelegt). Die lokal vorhandenen `venv/` und `.venv/` haben Python 3.9.6 und `numpy 2.0.2`, passen also nicht zu `requirements.txt` (siehe „Ungeprüft“).
+- Laufzeit: Python 3.11 in `venv/` (vom Installer angelegt; auf diesem Mac geprüft 2026-11-13). `.venv/` ist veraltet (siehe „Ungeprüft“).
 - Erforderliche Umgebungsvariablen: keine.
 - Zielsystem: lokal unter `http://localhost:8501`; Mac-App-Daten in `~/Library/Application Support/Grauzone PRO`.
 - Lokale Nutzerdaten, nicht im Repository: `knowledge_base.json`, `vornamen.txt`, `trainingsdaten/`.
@@ -129,7 +129,7 @@ Verworfene Ansätze:
 
 ## 4. Offene Aufgaben
 
-- [ ] Selbst-Update von 0.5.0 auf 0.5.1 auf einem Mac mit installierter App prüfen; Aufräumen auf den Macs (Priorität hoch). Geprüft 2026-11-12: Release v0.5.1 vollständig (DMG, `grauzone-update.tar.gz`, `SHA256SUMS`, `VERSION` = 0.5.1, Prüfsumme stimmt), Tag `v0.5.1` auf GitHub (zeigt auf 64e4a1d). Branch `redesign` auf GitHub war schon gelöscht, lokal auf diesem Mac gelöscht; auf dem zweiten Mac `git branch -d redesign` ausführen. Auf GitHub liegt noch `claude/laughing-lamport-dda70o` (Cloud-Sitzung, Inhalt ungeprüft).
+- [ ] Selbst-Update auf einem Mac mit installierter App prüfen, nach Veröffentlichung von 0.6.0 von 0.5.2 auf 0.6.0 (Priorität hoch). Aufräumen: auf dem zweiten Mac `git branch -d redesign`; `.venv/` löschen. Erledigt: Branch `redesign` (2026-11-12) und `claude/laughing-lamport-dda70o` (2026-11-13, war vollständig in `main` enthalten) auf GitHub gelöscht.
 - [ ] Zurückgestellt (vom Nutzer am 2026-11-12, erst angehen, wenn die Grenze `<1.68` angehoben wird): `st.components.v1.html` (Scroll-Sprung in `zur_seite_scrollen`, auch in 0.4.5) ist ab Streamlit 1.68 abgekündigt, Ersatz `st.iframe`; vor Anheben der Grenze umstellen und Sprung im Browser prüfen
 - [ ] Datumsprüfung `_ist_datum` in `finde` ist beim jetzigen TEL-Muster wirkungslos (kein Datum passt auf das Muster); bei Änderungen am TEL-Muster Test `test_datum_ist_keine_telefonnummer` beachten (niedrig)
 - [x] Behoben 2026-11-12 (für 0.5.2): EasyOCR in `requirements.txt` auf `>=1.7.2,<1.8` begrenzt; alle Tests mit `GRAUZONE_OCR_TEST=1` bestanden. PyTorch (von EasyOCR mitgezogen) bleibt unbegrenzt
@@ -146,9 +146,20 @@ Verworfene Ansätze:
 
 ### Nächster konkreter Schritt
 
-Stand 2026-11-12: 0.5.2 veröffentlicht. Paket A (Begründung, Prüfwarteschlange, Suche, Sammelaktion, Ergebnisansicht, gepusht) und Paket B (gleiche Angaben gemeinsam, Rückgängig/Wiederholen, Export einzelner Seiten) umgesetzt und im Browser geprüft; beide als Version 0.6.0 committet (`macos/VERSION`); dazu Paket C (Kennnummern, Geburtsdatum, Gesundheitsdaten). 0.6.0 noch nicht veröffentlicht; die am 2026-11-12 gebauten Dateien in `dist/` sind älter als Paket C und müssen vor dem Release neu gebaut werden. Später, mit Vorab-Entscheidung des Nutzers: Sitzungen speichern (Datenschutz der Sitzungsdatei), Tastaturkürzel (nach Umstellung auf `st.iframe`). Mehrere Dokumente: vom Nutzer abgelehnt. Als Nächstes: Selbst-Update prüfen (am Mac durch den Nutzer, jetzt auf 0.5.2), überflüssige Dateien auf den Macs löschen. Hinweis: Tags, Branch-Löschen und Release anlegen scheitern aus der Cloud-Sitzung (Verbindungsabbruch, DMG braucht macOS); das läuft auf dem Mac. 0.5.2 veröffentlicht (Dateiname des Exports ohne Originalnamen, EasyOCR begrenzt). Die geänderte `requirements.txt` löst beim ersten Start nach dem Update eine erneute Einrichtung der Bibliotheken aus. Danach: Test mit echten mehrseitigen Dokumenten (Text und Scan gemischt, Formulare, Tempo der Vorschau), dann die nächste Funktion aus dem Entwurf mit dem Nutzer wählen (Vorschlag: Fundstellen direkt in der Vorschau anklicken, oder Rückgängig). Prüfen vor jedem Commit: `./venv/bin/python -m unittest discover -s tests`.
+Stand 2026-11-13: 0.6.0 (Pakete A, B, C) in `main`; Release 0.6.0 wird vorbereitet (Paket in `dist/` neu bauen, Veröffentlichung nur nach Rückfrage). Gesamtprüfung 2026-11-13 mit gemischtem Test-PDF (Textseite, Scan per OCR, Formularfeld; erfundene Daten, `de_core_news_lg`): alle Angaben auf Text- und Scan-Seite erkannt und entfernt, Exportprüfung bestanden, Aktenzeichen und Briefdatum bleiben lesbar; 30 Seiten Regeln in 0,3 s.
+
+Als Nächstes, in dieser Reihenfolge:
+1. Nutzer am Mac: Selbst-Update von 0.5.2 auf 0.6.0 durchlaufen (seit 0.4.0 nie an einer installierten App geprüft, größtes Risiko).
+2. Nutzer: zwei, drei echte Dokumente (Brief, Scan, Formular) bearbeiten und notieren, was übersehen oder zu viel geschwärzt wurde, ohne Inhalte weiterzugeben.
+3. Paket D „Bereich von Hand schwärzen“ (Unterschrift, Foto, Stempel, Handschrift; heute nicht schwärzbar): Rechteck in der Vorschau aufziehen. Streamlit wertet keine Klicks auf Bilder aus; Zusatzpaket oder Koordinatenfelder vorher mit dem Nutzer abstimmen.
+4. Je nach Ergebnis von 2: Wortliste `GES_WOERTER` erweitern; Feldnamen von Formularen vor `doc.bake()` als Kontext nutzen (heute steht ein Name im Feld „Name“ nur unter „zu prüfen“); BIC-Länderkürzel; „Musterweg 12“ als Anschrift.
+5. Später, mit Vorab-Entscheidung des Nutzers: Sitzungen speichern (Datenschutz der Sitzungsdatei), Tastaturkürzel (nach Umstellung auf `st.iframe`), wiederkehrende Passagen (Briefkopf, Fußzeile).
+
+Hinweis aus der Gesamtprüfung (zur Kenntnis, keine Änderung ohne Auftrag): „nie schwärzen“ gilt global (Festlegung des Nutzers); seit Paket C betrifft das auch von Hand freigegebene Gesundheitsangaben und Kennnummern.
+
+Prüfen vor jedem Commit: `./venv/bin/python -m unittest discover -s tests`.
 
 ## Ungeprüft
 
-- Die lokalen Umgebungen `venv/` (Python 3.9.6, spaCy 3.8.2, numpy 2.0.2, Modelle 3.8.0) und `.venv/` (Python 3.9.6, spaCy 3.5.4, numpy 2.0.2) widersprechen `requirements.txt`. Ob sie noch gebraucht werden, ist offen; `Grauzone installieren.command` würde `venv/` mit Python 3.11 neu anlegen. `.venv/` steht in `.gitignore`.
+- `.venv/` (Python 3.9.6, spaCy 3.5.4, numpy 2.0.2) widerspricht `requirements.txt` und wird nicht gebraucht; `.venv/` steht in `.gitignore` und kann vom Nutzer gelöscht werden. `venv/` ist seit 2026-11-12 passend eingerichtet (geprüft 2026-11-13: Python 3.11.18, spaCy 3.5.4, numpy 1.26.4, Streamlit 1.67.0, PyMuPDF 2.1).
 - Herkunft und Zweck von `trainingsdaten/` und `dist/run_app.app` (vom 11.05.2026) sind nicht geklärt.

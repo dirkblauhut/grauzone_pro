@@ -78,7 +78,8 @@ Die App ist nur ad hoc signiert, nicht notarisiert. macOS fragt beim ersten Öff
 
 - **Bei Scans etwas breitere Balken:** EasyOCR kennt Wortgrenzen nur ungefähr. Anteilig geschätzte Wortteile bekommen viel Rand, dabei verschwindet manchmal ein Buchstabe des Nachbarworts.
 - **Mehrseitige echte Dokumente** sind noch nicht getestet, ebenso **Windows** und der Gatekeeper-Dialog nach einem echten Download.
-- **Gelernte „nie schwärzen“-Begriffe** gelten überall. Ein versehentlich abgewähltes Wort (z. B. ein Nachname) wird danach in allen Dokumenten übersehen, bis man es wieder anhakt oder das Gedächtnis löscht.
+- **Gelernte „nie schwärzen“-Begriffe** gelten überall. Ein versehentlich abgewähltes Wort (z. B. ein Nachname, seit 0.6.0 auch eine Diagnose oder Kennnummer) wird danach in allen Dokumenten übersehen, bis man es wieder anhakt, mit ↶ zurücknimmt oder das Gedächtnis löscht.
+- **Unterschriften, Fotos, Stempel, Handschrift** lassen sich nicht schwärzen, weil sie kein Text sind (geplant: Bereich von Hand schwärzen).
 - **Lange Dokumente:** Die Texterkennung dauert etwa 15 bis 20 Sekunden pro Scan-Seite auf der CPU.
 - **Notarisierung** bräuchte ein Apple-Entwicklerkonto (99 €/Jahr).
 - **Lizenz:** Grauzone steht unter MIT. PyMuPDF steht unter AGPL. Solange die Bibliotheken bei der Einrichtung geladen und nicht mitgeliefert werden, ist das unproblematisch; beim PyInstaller-Weg nicht.

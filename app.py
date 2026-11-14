@@ -6,6 +6,7 @@ import json
 import os
 import signal
 import threading
+import time
 from datetime import date, datetime
 
 import easyocr
@@ -14,6 +15,8 @@ import spacy
 import streamlit as st
 import streamlit.components.v1 as components
 from PIL import Image, ImageDraw
+from streamlit.runtime import Runtime
+from streamlit.runtime.scriptrunner import get_script_run_ctx
 from streamlit_image_coordinates import streamlit_image_coordinates
 
 import erkennung as E
@@ -103,11 +106,50 @@ if 'kb' not in st.session_state:
 kb = st.session_state.kb
 
 
+@st.cache_resource
+def sitzungen_mit_dokument():
+    """Kennungen der Browser-Sitzungen (Tabs), in denen ein Dokument geladen ist; für alle
+    Sitzungen dieses Servers gemeinsam."""
+    return set()
+
+
+def dokument_in_sitzung(geladen):
+    """Meldet, ob in dieser Sitzung ein Dokument geladen ist. Liefert True, wenn in einer anderen,
+    noch verbundenen Sitzung (anderer Browser-Tab) ein Dokument in Bearbeitung ist."""
+    try:
+        eigene = get_script_run_ctx().session_id
+        laufzeit = Runtime.instance()
+    except Exception:   # z. B. in Tests ohne Server
+        return False
+    offen = sitzungen_mit_dokument()
+    for sid in list(offen):
+        if sid != eigene and not laufzeit.is_active_session(sid):
+            offen.discard(sid)
+    (offen.add if geladen else offen.discard)(eigene)
+    return any(sid != eigene for sid in offen)
+
+
 # --- 4. HILFSFUNKTIONEN FÜR DIE SEITE ---
 
-def scanne(doc, seiten, ocr_erzwingen):
-    """Holt die Wörter der Seiten (Textebene oder Texterkennung)."""
-    for p in seiten:
+def dauer(sekunden):
+    sekunden = int(round(sekunden))
+    return f"{sekunden // 60} min {sekunden % 60:02d} s" if sekunden >= 60 else f"{sekunden} s"
+
+
+def scanne(doc, seiten, ocr_erzwingen, fortschritt=None):
+    """Holt die Wörter der Seiten (Textebene oder Texterkennung) und sucht gleich die Fundstellen,
+    damit die Wartezeit hier anfällt und angezeigt werden kann. fortschritt: st.progress oder None."""
+    seiten = list(seiten)
+    st.session_state.funde_speicher = {}
+    st.session_state.export = None
+    beginn = time.monotonic()
+    for k, p in enumerate(seiten):
+        if fortschritt is not None:
+            text = f"Seite {p + 1} wird gelesen ({k + 1} von {len(seiten)})"
+            if k >= 2:
+                rest = (time.monotonic() - beginn) / k * (len(seiten) - k)
+                text += f" · noch etwa {dauer(rest)}"
+            fortschritt.progress(k / len(seiten), text=text)
         page = doc[p]
         zeilen = [] if ocr_erzwingen else E.woerter_aus_textebene(page)
         quelle = "Textebene"
@@ -116,8 +158,9 @@ def scanne(doc, seiten, ocr_erzwingen):
             quelle = "Texterkennung"
         text, woerter = E.seitentext(zeilen)
         st.session_state.woerter[p] = {"text": text, "woerter": woerter, "quelle": quelle}
-    st.session_state.funde_speicher = {}
-    st.session_state.export = None
+        funde_der_seite(p)
+    if fortschritt is not None:
+        fortschritt.progress(1.0, text=f"{len(seiten)} Seite(n) gelesen in {dauer(time.monotonic() - beginn)}")
 
 
 def funde_der_seite(p):
@@ -414,6 +457,13 @@ if uploaded_file is not None and uploaded_file.name != st.session_state.last_upl
     st.session_state.letzter_klick = {}
     st.rerun()
 
+if dokument_in_sitzung(uploaded_file is not None) and not uploaded_file:
+    with col_m:
+        st.warning("**In einem anderen Browser-Tab ist schon ein Dokument in Bearbeitung.** Diese Seite "
+                   "wurde neu geöffnet (z. B. durch einen Klick auf das Programmsymbol) und ist leer. "
+                   "Die Bearbeitung im anderen Tab ist nicht verloren: bitte dorthin wechseln und diesen Tab "
+                   "schließen. „Beenden“ hier würde auch den anderen Tab beenden.", icon="🗂️")
+
 if not uploaded_file:
     with col_l:
         with st.container(border=True, key="karte_lernen_leer"):
@@ -667,6 +717,47 @@ def klick_verarbeiten(p, wert, seite_breite, seite_hoehe):
     return None
 
 
+def stelle_an_punkt(p, x, y, toleranz=2.0):
+    """Markierte Stelle unter dem Punkt (PDF-Punkte): ("hand", Eintrag), ("fund", Fundstelle) oder None.
+    Liegen mehrere übereinander, gilt das kleinste Rechteck (z. B. Wort in einem Bereich von Hand)."""
+    def flaeche_wenn_drin(r):
+        x0, y0, x1, y1 = r
+        if x0 - toleranz <= x <= x1 + toleranz and y0 - toleranz <= y <= y1 + toleranz:
+            return (x1 - x0) * (y1 - y0)
+        return None
+    kandidaten = []
+    for e in hand_der_seite(p):
+        f = flaeche_wenn_drin(e["rect"])
+        if f is not None:
+            kandidaten.append((f, "hand", e))
+    for fund in funde_der_seite(p):
+        for r in rechtecke(p, fund):
+            f = flaeche_wenn_drin(r)
+            if f is not None:
+                kandidaten.append((f, "fund", fund))
+    if not kandidaten:
+        return None
+    _, art, stelle = min(kandidaten, key=lambda k: k[0])
+    return art, stelle
+
+
+def klick_ansehen(p, wert, seite_breite):
+    """Klick in der Vorschau im Modus Ansehen: markierte Stelle schwärzen oder freigeben, wie mit
+    dem Haken rechts. Neue Stellen entstehen nur im Modus Markieren. Liefert eine Meldung oder None."""
+    faktor = seite_breite / max(wert["width"], 1)
+    treffer = stelle_an_punkt(p, wert["x"] * faktor, wert["y"] * faktor)
+    if treffer is None:
+        return ("Dort ist keine markierte Stelle. Neue Stellen schwärzen: oben **✋ Markieren** wählen.")
+    art, stelle = treffer
+    if art == "fund":
+        entscheide(p, stelle, not ist_gewaehlt(p, stelle))
+    else:
+        merke(f"Markierung von Hand {'ausgeschaltet' if stelle['an'] else 'eingeschaltet'}")
+        stelle["an"] = not stelle["an"]
+        st.session_state.export = None
+    return None
+
+
 def begriffe_schwaerzen(eingabe, merken):
     """„Begriff schwärzen“: nur für dieses Dokument oder dauerhaft (gelernt). Meldet die Treffer
     je Seite, damit sichtbar ist, ob der Begriff im erkannten Text überhaupt vorkommt."""
@@ -726,8 +817,7 @@ with col_l:
                   help="Ein Haken gilt für dieselbe Angabe auf allen gescannten Seiten "
                        "(Groß-/Kleinschreibung egal). Aus: jede Seite einzeln.")
         if st.button("📚 Alle Seiten scannen", type="primary", width="stretch"):
-            with st.spinner(f"{n} Seiten werden gelesen …"):
-                scanne(doc, range(n), ocr_erzwingen)
+            scanne(doc, range(n), ocr_erzwingen, st.progress(0.0, text=f"{n} Seiten werden vorbereitet …"))
             st.rerun()
         if st.button(f"🔍 Nur Seite {p_id + 1} scannen", width="stretch"):
             with st.spinner("Seite wird gelesen …"):
@@ -1067,6 +1157,8 @@ with col_m:
             st.rerun()
         st.session_state.gezeigt = (p_id, False)
     elif st.session_state.alle_zeigen and n > 1:
+        if st.session_state.ansicht == "Original":
+            st.caption("Zum Abwählen per Klick in der Vorschau oben **Alle Seiten** ausschalten.")
         with st.container(height=800, key="vorschau"):
             for p in range(n):
                 k1, k2 = st.columns([3, 1], vertical_alignment="center")
@@ -1081,7 +1173,25 @@ with col_m:
         if st.session_state.get("gezeigt") not in (None, (p_id, True)):
             zur_seite_scrollen(p_id)
         st.session_state.gezeigt = (p_id, True)
+    elif st.session_state.ansicht == "Original" and zoom == 1.0:
+        # Einzelansicht des Originals: Klick auf eine markierte Stelle schwärzt sie oder gibt sie frei.
+        # Nur bei 100 %: das Klick-Bauteil folgt dem Zoom nicht (das Bild füllt immer die Spalte).
+        st.caption("Klick auf eine markierte Stelle = schwärzen oder freigeben (wie der Haken rechts).")
+        meldung = st.session_state.pop("klick_meldung", None)
+        if meldung:
+            st.info(meldung)
+        with st.container(key="einzeln"):
+            wert = streamlit_image_coordinates(
+                vorschau(doc, datei_id, p_id, aufloesung), key=f"ansehen_{p_id}", width="stretch",
+                image_format="JPEG", jpeg_quality=85, cursor="pointer")
+        if wert and wert.get("unix_time") != st.session_state.letzter_klick.get(("ansehen", p_id)):
+            st.session_state.letzter_klick[("ansehen", p_id)] = wert.get("unix_time")
+            st.session_state.klick_meldung = klick_ansehen(p_id, wert, doc[p_id].rect.width)
+            st.rerun()
+        st.session_state.gezeigt = (p_id, False)
     else:
+        if st.session_state.ansicht == "Original":
+            st.caption("Abwählen per Klick in der Vorschau geht bei 100 % Zoom.")
         with st.container(key="einzeln"):
             if st.session_state.ansicht != "Original" and p_id not in st.session_state.woerter:
                 st.warning("Seite nicht gescannt und daher im Ergebnis **nicht geschwärzt**.")

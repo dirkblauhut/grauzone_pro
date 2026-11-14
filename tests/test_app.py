@@ -259,6 +259,38 @@ class AppDurchlauf(unittest.TestCase):
             self.assertEqual([], [str(e.value) for e in at.exception])
             self.assertEqual(erwartet, at.session_state[schluessel])
 
+    def test_klick_in_der_vorschau_schaltet_fundstelle(self):
+        # Ansehen, Einzelansicht des Originals: Klick auf eine markierte Stelle wie der Haken rechts.
+        # AppTest führt das Klick-Bauteil nicht aus, daher liefert ein Ersatz den Klick.
+        import streamlit_image_coordinates as bauteil
+        at = self.at
+        at.session_state.alle_zeigen = False
+        at.run()
+        fund = next(f for k, v in at.session_state.funde_speicher.items() if k[0] == 0 for f in v
+                    if f.art == "PER")
+        w = at.session_state.woerter[0]["woerter"][fund.woerter[0]]
+        breite = pymupdf.open(stream=mehrseitig(), filetype="pdf")[0].rect.width
+        original = bauteil.streamlit_image_coordinates
+
+        def klicke(x, y, zeit):
+            bauteil.streamlit_image_coordinates = lambda *a, key=None, **k: (
+                {"x": x, "y": y, "width": breite, "height": 842, "unix_time": zeit} if key == "ansehen_0" else None)
+            try:
+                at.run()
+            finally:
+                bauteil.streamlit_image_coordinates = original
+            self.assertEqual([], [str(e.value) for e in at.exception])
+        mitte = ((w.rect[0] + w.rect[2]) / 2, (w.rect[1] + w.rect[3]) / 2)
+        klicke(*mitte, 1)
+        self.assertFalse(at.session_state.auswahl[(0, fund.text.lower())])
+        self.assertIn(fund.text, at.session_state.kb["whitelist"], "lernt wie der Haken")
+        klicke(*mitte, 1)
+        self.assertFalse(at.session_state.auswahl[(0, fund.text.lower())], "derselbe Klick nur einmal")
+        klicke(*mitte, 2)
+        self.assertTrue(at.session_state.auswahl[(0, fund.text.lower())])
+        klicke(5, 5, 3)
+        self.assertTrue(any("keine markierte Stelle" in i.value for i in at.info))
+
     def test_seite_drehen(self):
         at = self.at
         at.session_state.hand = [{"id": 1, "p": 0, "art": "BEREICH", "rect": (60, 95, 400, 112), "wort": None,
